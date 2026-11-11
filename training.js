@@ -18,10 +18,10 @@ function dayKey(d){ d = d || new Date(); return d.getFullYear() + "-" + String(d
 function loadProgress(){
   let p = null;
   try { p = JSON.parse(localStorage.getItem("zugwerk.progress")); } catch(e){}
-  return Object.assign({rating:400, solved:0, failed:0, seen:{}, lessons:{}, days:{}}, p || {});
+  return Object.assign({rating:400, solved:0, failed:0, seen:{}, lessons:{}, days:{}, cleared:{}, updated:0}, p || {});
 }
 let PR = loadProgress();
-function saveProgress(){ try { localStorage.setItem("zugwerk.progress", JSON.stringify(PR)); } catch(e){} }
+function saveProgress(){ PR.updated = Date.now(); try { localStorage.setItem("zugwerk.progress", JSON.stringify(PR)); } catch(e){} if (window.zwSyncSoon) zwSyncSoon(); }
 function today(){ const k = dayKey(); return PR.days[k] || (PR.days[k] = {p:0, l:0, m:0, a:0}); }
 function bump(key){ today()[key]++; saveProgress(); renderHome(); }
 function streak(){
@@ -35,7 +35,7 @@ function streak(){
   return n;
 }
 function loadMistakes(){ try { return JSON.parse(localStorage.getItem("zugwerk.mistakes")) || []; } catch(e){ return []; } }
-function saveMistakes(list){ try { localStorage.setItem("zugwerk.mistakes", JSON.stringify(list.slice(-300))); } catch(e){} }
+function saveMistakes(list){ try { localStorage.setItem("zugwerk.mistakes", JSON.stringify(list.slice(-300))); } catch(e){} if (window.zwSyncSoon) zwSyncSoon(); }
 
 /* Wird nach jeder fertigen Analyse aufgerufen: eigene Fehler werden zu Rätseln */
 window.zwAfterAnalysis = function(){
@@ -270,7 +270,7 @@ function puzzleSolved(alt, sq){
   if (!pz.failed) rate(pz.hinted ? .5 : 1);
   if (pz.kind === "mistake"){
     const list = loadMistakes(), m = list.find(x => x.fen === pz.ref);
-    if (m){ m.n++; if (!pz.failed && !pz.hinted && m.n >= 2) list.splice(list.indexOf(m), 1); saveMistakes(list); }
+    if (m){ m.n++; if (!pz.failed && !pz.hinted && m.n >= 2){ list.splice(list.indexOf(m), 1); PR.cleared[m.fen] = 1; saveProgress(); } saveMistakes(list); }
     bump("m");
   } else { PR.seen[pz.idx] = 1; saveProgress(); bump("p"); }
   const msg = pz.failed ? "Gelöst, aber nicht im ersten Versuch." : alt ? "Auch richtig! Dein Zug ist genauso stark." : "Gelöst!";
