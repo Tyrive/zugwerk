@@ -46,7 +46,7 @@ main{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;a
 .evalbar .w{position:absolute;left:0;right:0;bottom:0;background:var(--g-white);transition:height .35s ease}
 .evalbar .lbl{position:absolute;left:0;right:0;font:600 9px/1 var(--font-mono);text-align:center;padding:4px 0}
 .evalbar.flip .w{top:0;bottom:auto}
-.board{position:relative;aspect-ratio:1;max-width:100%;display:grid;grid-template-columns:repeat(8,1fr);border-radius:6px;overflow:hidden;user-select:none}
+.board{position:relative;aspect-ratio:1;max-width:100%;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));border-radius:6px;overflow:hidden;user-select:none}
 .sq{position:relative;display:flex;align-items:center;justify-content:center;font-size:clamp(22px,7.6vw,52px);line-height:1}
 .sq.l{background:var(--sq-light)} .sq.d{background:var(--sq-dark)}
 .sq.last::after{content:"";position:absolute;inset:0;background:var(--sq-last)}
