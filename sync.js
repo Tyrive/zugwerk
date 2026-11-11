@@ -52,18 +52,28 @@ function mergeMistakes(a, b, cleared){
   });
   return [...map.values()].slice(-300);
 }
+function mergeOpenings(a, b){
+  const r = {};
+  new Set([...Object.keys(a || {}), ...Object.keys(b || {})]).forEach(k => {
+    const x = (a || {})[k] || {}, y = (b || {})[k] || {};
+    r[k] = {seen: !!(x.seen || y.seen), ok:Math.max(x.ok || 0, y.ok || 0), err:Math.max(x.err || 0, y.err || 0), last:Math.max(x.last || 0, y.last || 0)};
+  });
+  return r;
+}
 function localData(){
   let user = ""; try { user = localStorage.getItem("zugwerk.user") || ""; } catch(e){}
-  return {v:1, progress:PR, mistakes:loadMistakes(), user};
+  return {v:1, progress:PR, mistakes:loadMistakes(), user, openings:loadOpProgress()};
 }
 function applyData(d){
   PR = Object.assign(loadProgress(), d.progress);
   try {
     localStorage.setItem("zugwerk.progress", JSON.stringify(PR));
     localStorage.setItem("zugwerk.mistakes", JSON.stringify(d.mistakes || []));
+    localStorage.setItem("zugwerk.openings", JSON.stringify(d.openings || {}));
     if (d.user && !localStorage.getItem("zugwerk.user")){ localStorage.setItem("zugwerk.user", d.user); if ($("ccUser") && !$("ccUser").value) $("ccUser").value = d.user; }
   } catch(e){}
   renderHome();
+  if (window.zwOpeningsReload) zwOpeningsReload();
 }
 
 /* ---------- Abgleich ---------- */
@@ -77,7 +87,7 @@ async function syncNow(){
     try { remote = JSON.parse((g.files[SYNC_FILE] || {}).content || "{}"); } catch(e){}
     const local = localData();
     const progress = mergeProgress(local.progress, remote.progress);
-    const merged = {v:1, progress, mistakes:mergeMistakes(local.mistakes, remote.mistakes, progress.cleared || {}), user: local.user || remote.user || ""};
+    const merged = {v:1, progress, mistakes:mergeMistakes(local.mistakes, remote.mistakes, progress.cleared || {}), user: local.user || remote.user || "", openings:mergeOpenings(local.openings, remote.openings)};
     applyData(merged);
     if (JSON.stringify(merged) !== JSON.stringify(remote)){
       await gh("/gists/" + cfg.gist, cfg.token, {method:"PATCH", body:{files:{[SYNC_FILE]:{content:JSON.stringify(merged)}}}});

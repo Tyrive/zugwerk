@@ -205,6 +205,30 @@ textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:verti
 .lesson.done .chk{background:var(--accent);border-color:var(--accent);color:#fff}
 .lesson.next{background:var(--surface2)}
 .tagnext{font-size:.72rem;font-weight:800;color:var(--accent)}
+/* Eröffnungen */
+#oBoard{width:100%}
+.ophead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.opcount{text-align:right;font:800 1.4rem/1.1 var(--font-ui);color:#fff}
+.opcount b{font-weight:800}
+.opcount .muted{font-size:.75rem;font-weight:600}
+details{margin-top:8px}
+summary{cursor:pointer;font-weight:700;color:var(--fg);padding:4px 0}
+details ul{margin:.3em 0;padding-left:1.2em;display:grid;gap:4px}
+.gnote{font-size:.82rem;margin:-2px 0 4px}
+.lrow{display:grid;grid-template-columns:20px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:4px 6px;border-radius:6px}
+.lrow.cur{background:var(--surface2)}
+.lrow .chk{width:18px;height:18px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:11px;font-weight:800}
+.lrow .chk.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.lname{background:none;border:0;color:var(--fg);text-align:left;font:inherit;cursor:pointer;padding:4px 0;min-width:0}
+.lname:hover{color:var(--accent)}
+.lt{font-size:.75rem;color:var(--muted);font-weight:700;white-space:nowrap}
+.lt.warn{color:var(--c-mistake)}
+.btn.sm{padding:4px 10px;font-size:.82rem;min-width:0}
+.omoves{display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center;font-family:var(--font-mono);font-size:.9rem}
+.omoves .mnum{color:var(--muted);margin-left:6px}
+.omv{background:none;border:0;color:var(--fg);font:inherit;padding:3px 6px;border-radius:5px;cursor:pointer}
+.omv.cur{background:var(--accent);color:#fff}
+span.omv{cursor:default}
 .tips ol{margin:0;padding-left:1.2em;display:grid;gap:6px;font-size:.9rem;line-height:1.45}
 footer{color:var(--muted);font-size:.8rem;max-width:70ch}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
@@ -216,6 +240,7 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     <h1>Zug<span>werk</span></h1>
     <nav class="topnav">
       <a href="#" id="navAnalyse" aria-current="page">Analyse</a>
+      <a href="#openings" id="navOpenings">Eröffnungen</a>
       <a href="#training" id="navTraining">Training</a>
     </nav>
   </header>
@@ -285,6 +310,27 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
       <div class="panel">
         <h2>Züge</h2>
         <div class="moves" id="moves"></div>
+      </div>
+    </section>
+  </main>
+
+  <main id="viewOpenings" hidden>
+    <section class="col">
+      <div class="board" id="oBoard"></div>
+      <div class="panel tpanel" id="oPanel"></div>
+      <div class="tctl" id="oCtl"></div>
+      <div class="panel"><h2>Züge</h2><div class="omoves" id="oMoves"></div></div>
+    </section>
+    <section class="col">
+      <div class="panel" id="oInfo"></div>
+      <div class="panel"><h2>Varianten</h2><div id="oLines"></div></div>
+      <div class="panel tips"><h2>So lernst du eine Eröffnung</h2>
+        <ol>
+          <li><b>Erst verstehen:</b> Variante im Lernmodus durchgehen und die Erklärungen lesen. Warum steht der Zug da?</li>
+          <li><b>Dann üben:</b> Du spielst, der Gegner wählt zufällig eine seiner typischen Antworten. Fehler kommen öfter dran.</li>
+          <li><b>Nach der Partie vergleichen:</b> Wo bist du aus der Theorie raus, und warum?</li>
+          <li><b>Pläne statt Züge:</b> Wenn der Gegner etwas Unbekanntes spielt, hilft der Aufbau c3, d3, Rochade, Te1, h3.</li>
+        </ol>
       </div>
     </section>
   </main>
@@ -1114,9 +1160,11 @@ $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
 $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
 </script>
-<script src="lessons.js?v=20261112a"></script>
-<script src="puzzles.js?v=20261112a"></script>
-<script src="training.js?v=20261112a"></script>
-<script src="sync.js?v=20261112a"></script>
+<script src="lessons.js?v=20261112b"></script>
+<script src="puzzles.js?v=20261112b"></script>
+<script src="openings.js?v=20261112b"></script>
+<script src="openings-ui.js?v=20261112b"></script>
+<script src="training.js?v=20261112b"></script>
+<script src="sync.js?v=20261112b"></script>
 </body>
 </html>

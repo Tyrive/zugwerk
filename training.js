@@ -486,12 +486,15 @@ window.zwStartMistakes = () => startPuzzle("mistakes");
 
 /* ---------- Ansicht umschalten (#training) ---------- */
 function route(){
-  const tr = location.hash === "#training";
-  document.body.dataset.view = tr ? "training" : "analyse";
-  $("viewAnalyse").hidden = tr; $("viewTraining").hidden = !tr;
-  $("navAnalyse").setAttribute("aria-current", tr ? "false" : "page");
-  $("navTraining").setAttribute("aria-current", tr ? "page" : "false");
-  if (tr){ liveRequest(null); initTraining(); } else render();
+  const v = location.hash === "#training" ? "training" : location.hash === "#openings" ? "openings" : "analyse";
+  document.body.dataset.view = v;
+  $("viewAnalyse").hidden = v !== "analyse"; $("viewTraining").hidden = v !== "training"; $("viewOpenings").hidden = v !== "openings";
+  $("navAnalyse").setAttribute("aria-current", v === "analyse" ? "page" : "false");
+  $("navTraining").setAttribute("aria-current", v === "training" ? "page" : "false");
+  $("navOpenings").setAttribute("aria-current", v === "openings" ? "page" : "false");
+  if (v === "training"){ liveRequest(null); initTraining(); }
+  else if (v === "openings"){ liveRequest(null); window.zwInitOpenings(); }
+  else render();
 }
 window.addEventListener("hashchange", route);
 route();
