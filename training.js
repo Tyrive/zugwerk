@@ -66,7 +66,7 @@ function search(fen, depth){
     await tEngine();
     const r = await TR.eng.analyse(fen, depth);
     const win = r.type === "mate" ? (r.val > 0 ? 100 : 0) : winPct(r.val);
-    return {win, best:r.best, mate: r.type === "mate" ? r.val : null, cp: r.type === "cp" ? r.val : null};
+    return {win, best:r.best, pv:r.pv, mate: r.type === "mate" ? r.val : null, cp: r.type === "cp" ? r.val : null};
   });
   TR.chain = job.catch(() => {});
   return job;
@@ -81,6 +81,75 @@ async function moverWin(fen, uci, depth){
   return 100 - r.win;
 }
 const U = u => ({from:u.slice(0,2), to:u.slice(2,4), promotion:u[4] || "q"});
+
+/* ---------- Erklärungen zu Rätselzügen ---------- */
+const NOM = {p:"der Bauer", n:"der Springer", b:"der Läufer", r:"der Turm", q:"die Dame", k:"der König"};
+const NAMEN = {p:"Bauer", n:"Springer", b:"Läufer", r:"Turm", q:"Dame", k:"König"};
+const DEN = {p:"den Bauern", n:"den Springer", b:"den Läufer", r:"den Turm", q:"die Dame", k:"den König"};
+const WEG = {p:"ein Bauer", n:"ein Springer", b:"ein Läufer", r:"ein Turm", q:"die Dame", k:"der König"};
+const DER = t => t === "q" ? "Die Dame" : "Der " + NAMEN[t];
+// Material am Ende einer Linie; ein eigener Rückschlag zählt mit (wie in der Partieanalyse)
+function matEnd(steps, col, m0){ let v = null; steps.forEach(s => { const x = material(s.after, col); v = (v === null || s.color !== col) ? x : Math.max(v, x); }); return v === null ? m0 : v; }
+// Welche gegnerischen Figuren greift die Figur auf sq an?
+function attackedBy(fen, sq){
+  const c = new Chess(fen), p = c.get(sq); if (!p) return [];
+  const f = fen.split(" "); f[1] = p.color; f[3] = "-";
+  const t = new Chess(); if (!t.load(f.join(" "))) return [];
+  const hits = t.moves({square:sq, verbose:true}).filter(m => m.captured).map(m => m.captured);
+  if (c.in_check()) hits.unshift("k");
+  return hits;
+}
+const listDe = arr => arr.length < 2 ? (arr[0] || "") : arr.slice(0, -1).join(", ") + " und " + arr[arr.length - 1];
+function motif(fen, line, tag){
+  const c = new Chess(fen), m = c.move(U(line[0])); if (!m) return "";
+  const targets = [...new Set(attackedBy(c.fen(), m.to))].filter(t => t === "k" || VAL[t] >= 3);
+  if (targets.length >= 2)
+    return `<b>Gabel:</b> ${DER(m.piece)} auf ${m.to} greift ${listDe(targets.map(t => DEN[t]))} gleichzeitig an. Der Gegner kann nicht alles retten.`;
+  if (tag === "hanging" && m.captured) return `Die Figur auf ${m.to} war <b>nicht gedeckt</b>. Vor jedem Zug lohnt der Blick: Was hat der Gegner gerade ungeschützt gelassen?`;
+  if (m.san.includes("+") && tag === "fork") return `Der Zug kommt <b>mit Schach</b> und bereitet eine Gabel vor: Der Gegner muss reagieren, und im nächsten Zug greift deine Figur zwei Ziele an.`;
+  if (m.san.includes("+")) return `Der Zug kommt <b>mit Schach</b>. Der Gegner muss zuerst darauf reagieren und hat keine Zeit für seine eigenen Pläne.`;
+  if (m.captured) return `${DER(m.piece)} schlägt auf ${m.to} und leitet die Kombination ein.`;
+  return "";
+}
+async function explainSolution(fen, line, tag){
+  const col = fen.split(" ")[1], m0 = material(fen, col);
+  const steps = walk(fen, line, line.length);
+  const end = steps.length ? steps[steps.length - 1].after : fen, ce = new Chess(end);
+  if (ce.in_checkmate()){
+    const n = Math.ceil(steps.length / 2);
+    return `<b>Matt in ${n}.</b> ${n > 1 ? "Jeder Zug kommt mit Schach oder einer Drohung, der Gegner hat keine Zeit zur Verteidigung. " : "Der König hat kein Fluchtfeld, und nichts kann dazwischenziehen oder den Angreifer schlagen. "}Zugfolge: <b>${lineTxt(steps, steps.length)}</b>.`;
+  }
+  let more = [];
+  try { const r = await search(end, 14); more = walk(end, r.pv, 3); } catch(e){}
+  const all = steps.concat(more), gain = matEnd(all, col, m0) - m0;
+  // Bilanz bis zum letzten eigenen Schlagzug (danach folgt nur noch normales Spiel)
+  const mine = all.filter(s => s.color === col && s.captured).map(s => DEN[s.captured]);
+  const theirs = all.filter(s => s.color !== col && s.captured).map(s => DEN[s.captured]);
+  let out = motif(fen, line, tag);
+  out += ` Zugfolge: <b>${lineTxt(all, all.length)}</b>.`;
+  if (gain >= 1 && mine.length) out += ` Bilanz: <b>+${gain}</b> Bauerneinheiten. Du schlägst ${listDe(mine)}${theirs.length ? `, der Gegner ${listDe(theirs)}` : ""}.`;
+  return out.trim();
+}
+async function explainWrong(fen, uci, missedMate){
+  const col = fen.split(" ")[1], m0 = material(fen, col);
+  const c = new Chess(fen), m = c.move(U(uci)); if (!m) return "";
+  if (c.in_checkmate()) return "";
+  if (c.game_over()) return `<b class="mono">${esc(de(m.san))}</b> führt zum Patt oder Remis.`;
+  const r = await search(c.fen(), 14);
+  const reply = walk(c.fen(), r.pv, 4), san = `<b class="mono">${esc(de(m.san))}</b>`;
+  const pre = missedMate ? `Damit verpasst du das Matt. ` : "";
+  if (r.mate !== null && r.mate > 0) return pre + `${san} erlaubt ein Matt in ${r.mate}: <b>${lineTxt(walk(c.fen(), r.pv, r.mate * 2 - 1), r.mate * 2 - 1)}</b>.`;
+  const lost = m0 - matEnd(reply, col, m0);
+  if (lost >= 1){
+    const cap = reply.find(s => s.color !== col && s.captured);
+    const hung = cap && cap.to === m.to;
+    return pre + `${san} ${hung ? `stellt ${DEN[m.piece]} auf ${m.to} ein` : "verliert Material"}: Nach <b>${lineTxt(reply, 4)}</b> ${cap ? `ist ${WEG[cap.captured]} weg` : "fehlt dir Material"}.`;
+  }
+  const w = 100 - r.win;
+  if (missedMate) return `Damit verpasst du das Matt. Nach ${san} antwortet der Gegner am besten mit <b>${lineTxt(reply, 3)}</b>.`;
+  return `${san} ist kein Fehler im Material, lässt aber die Chance liegen. Danach hast du nur noch ${Math.round(w)} % Gewinnchance. Der Gegner antwortet am besten mit <b>${lineTxt(reply, 3)}</b>.`;
+}
+function showExp(pz, html){ if (TR.pz !== pz) return; const e = $("tExp"); if (e && html) e.innerHTML = html; }
 
 /* ---------- Brett für das Training ---------- */
 class TBoard{
@@ -216,7 +285,7 @@ function startPuzzle(modeId){
   const title = pz.kind === "mistake" ? `Dein Fehler gegen ${esc(pz.opp || "?")}` : `${TAGS[pz.tag]} · ca. ${pz.r} Elo`;
   panel(`<div class="ttitle">${title}</div>
     <div class="ttext">${sideTxt(pz.fen)} am Zug. ${pz.kind === "mate" ? "Finde das Matt." : pz.kind === "mistake" ? `In der Partie hast du <b class="mono">${esc(de(sanOf(pz.fen, pz.played)))}</b> gespielt. Finde den besseren Zug.` : "Finde den besten Zug."}</div>
-    <div id="tFb" class="fb"></div>`);
+    <div id="tFb" class="fb"></div><div id="tExp" class="texp"></div>`);
   controls([
     {label:"Hinweis", fn:puzzleHint},
     {label:"Lösung zeigen", fn:puzzleSolution},
@@ -263,7 +332,10 @@ async function puzzleMove(uci, m, after){
   if (!pz.failed){ pz.failed = true; rate(0); }
   b.enabled = false; b.mark = {sq:m.to, ok:false}; b.render();
   feedback("bad", "Das ist nicht der beste Zug. Versuch es nochmal.");
-  setTimeout(() => { if (TR.pz === pz && !pz.done){ b.set(pz.now, {}); b.enabled = true; } }, 800);
+  const before = pz.now;
+  showExp(pz, '<span class="muted">Warum nicht? Stockfish schaut nach …</span>');
+  explainWrong(before, uci, pz.kind === "mate").then(t => showExp(pz, t ? "<b>Warum nicht:</b> " + t : "")).catch(() => {});
+  setTimeout(() => { if (TR.pz === pz && !pz.done){ b.set(pz.now, {}); b.enabled = true; } }, 1200);
 }
 function puzzleSolved(alt, sq){
   const pz = TR.pz, b = TR.board;
@@ -276,12 +348,28 @@ function puzzleSolved(alt, sq){
     bump("m");
   } else { PR.seen[pz.idx] = 1; saveProgress(); bump("p"); }
   const msg = pz.failed ? "Gelöst, aber nicht im ersten Versuch." : alt ? "Auch richtig! Dein Zug ist genauso stark." : "Gelöst!";
+  explainDone(pz);
   feedback("good", `${msg}${pz.kind !== "mistake" ? ` Deine Rätselwertung: <b>${PR.rating}</b>` : ""}`);
   controls([
     {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
     {label:"Lösung ansehen", fn:puzzleSolution},
+    {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
     {label:"Übersicht", fn:() => showHomePanel()}
   ]);
+}
+async function explainDone(pz){
+  showExp(pz, '<span class="muted">Erklärung wird berechnet …</span>');
+  try {
+    let t = "<b>Warum das funktioniert:</b> " + await explainSolution(pz.fen, pz.line, pz.tag);
+    if (pz.kind === "mistake" && pz.played){ const w = await explainWrong(pz.fen, pz.played); if (w) t += "<br><b>Dein Partiezug:</b> " + w; }
+    showExp(pz, t);
+  } catch(e){ showExp(pz, ""); }
+}
+function puzzleToAnalysis(pz){
+  const c = new Chess(pz.fen), sans = [];
+  pz.line.forEach(u => { const m = c.move(U(u)); if (m) sans.push(m.san); });
+  const pgn = `[SetUp "1"]\n[FEN "${pz.fen}"]\n[White "Rätsel"]\n[Black "${pz.kind === "mistake" ? "Eigener Fehler" : TAGS[pz.tag]}"]\n\n${sans.join(" ")}`;
+  try { setGame(parseGame(pgn), pz.side === "b"); location.hash = ""; setTimeout(() => go(0), 50); } catch(e){}
 }
 function puzzleHint(){
   const pz = TR.pz; if (!pz || pz.done) return;
@@ -299,7 +387,7 @@ function puzzleSolution(){
   let i = 0;
   b.set(pz.fen, {});
   const stepFn = () => {
-    if (i >= pz.line.length){ feedback("", `Lösung: <b class="mono">${esc(sans.join(" "))}</b>`); return; }
+    if (i >= pz.line.length){ feedback("", `Lösung: <b class="mono">${esc(sans.join(" "))}</b>`); explainDone(pz); return; }
     const before = c.fen(), r = c.move(U(pz.line[i]));
     sans.push(i === 0 || r.color === "w" ? moveLabel(before, r.san) : de(r.san));
     b.set(c.fen(), {last:{from:r.from, to:r.to}}); i++;
@@ -308,6 +396,7 @@ function puzzleSolution(){
   setTimeout(stepFn, 300);
   controls([
     {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
+    {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
     {label:"Übersicht", fn:() => showHomePanel()}
   ]);
 }
