@@ -747,6 +747,8 @@ class Draw{
   }
 }
 var DRAW = null;
+// Kein Kontextmenü auf einem Brett, auch falls ein Brett neu aufgebaut wird
+document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest(".board")) e.preventDefault(); }, true);
 function arrowSvg(uci, color){
   const a = sqPos(uci.slice(0,2)), b = sqPos(uci.slice(2,4));
   const x1 = a.x + .5, y1 = a.y + .5, x2 = b.x + .5, y2 = b.y + .5;
@@ -1112,9 +1114,9 @@ $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
 $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
 </script>
-<script src="lessons.js"></script>
-<script src="puzzles.js"></script>
-<script src="training.js"></script>
-<script src="sync.js"></script>
+<script src="lessons.js?v=20261112a"></script>
+<script src="puzzles.js?v=20261112a"></script>
+<script src="training.js?v=20261112a"></script>
+<script src="sync.js?v=20261112a"></script>
 </body>
 </html>
