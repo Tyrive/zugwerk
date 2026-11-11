@@ -57,6 +57,11 @@ main{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;a
 .co.f{right:3px;bottom:2px} .co.r{left:3px;top:2px}
 .sq.d .co{color:var(--sq-light)}
 .arrows{position:absolute;inset:0;pointer-events:none;z-index:2}
+.sq.sel{box-shadow:inset 0 0 0 3px var(--accent)}
+.sq.sel.l,.sq.sel.d{filter:brightness(1.05)}
+.sq.tgt::before{content:"";position:absolute;width:28%;height:28%;border-radius:50%;background:rgba(20,40,30,.32);z-index:2}
+.sq.tgt.cap::before{width:84%;height:84%;background:none;border:4px solid rgba(20,40,30,.32);box-sizing:border-box}
+.board .sq{cursor:pointer}
 .badge-sq{position:absolute;top:-2px;right:-2px;z-index:3;min-width:20px;height:20px;padding:0 4px;border-radius:10px;font:700 11px/20px var(--font-mono);color:#fff;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.35)}
 
 .nav{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
@@ -127,6 +132,20 @@ textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:verti
 .mv.cur{background:var(--accent);color:var(--accent-fg)}
 .mv .chip{min-width:22px;font-size:10px}
 .empty{color:var(--muted);font-size:.9rem}
+.livehead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.livehead h2{margin:0}
+.livehead .d{font:600 .78rem var(--font-mono);color:var(--muted)}
+.lines{display:grid;gap:4px}
+.line{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;align-items:center;padding:6px 8px;border:1px solid transparent;border-radius:8px;background:none;text-align:left;cursor:pointer;width:100%;font:inherit}
+.line:hover{border-color:var(--line);background:var(--bg)}
+.line .ev{font:700 .8rem var(--font-mono);text-align:center;border-radius:5px;padding:2px 0}
+.line .ev.w{background:var(--g-white);color:#1d2420;border:1px solid var(--line)}
+.line .ev.b{background:var(--g-black);color:#f4f6f3}
+.line .pv{font:.85rem var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.line .pv b{font-weight:600}
+.varbar{display:flex;flex-wrap:wrap;gap:4px 6px;font-family:var(--font-mono);font-size:.88rem;margin-top:4px}
+.varbar span{padding:1px 4px;border-radius:4px}
+.varbar span.cur{background:var(--accent);color:var(--accent-fg)}
 footer{color:var(--muted);font-size:.8rem;max-width:70ch}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -155,6 +174,10 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
         <button class="btn" id="bFlip">Brett drehen</button>
       </div>
       <div class="panel comment" id="comment"></div>
+      <div class="panel">
+        <div class="livehead"><h2>Engine-Linien</h2><span class="d" id="liveDepth"></span><button class="btn" id="bLive" aria-pressed="true">An</button></div>
+        <div class="lines" id="lines"></div>
+      </div>
       <div class="graph"><h2>Bewertungsverlauf</h2><svg id="graph" viewBox="0 0 600 120" preserveAspectRatio="none" aria-label="Bewertungsverlauf"></svg></div>
     </section>
 
@@ -203,7 +226,7 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     </section>
   </main>
 
-  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Pfeiltasten ← → zum Navigieren.</footer>
+  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Pfeiltasten ← → zum Navigieren. Figuren anklicken und Zielfeld wählen, um eigene Varianten zu testen (Umwandlung immer in eine Dame).</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -232,7 +255,7 @@ const SAMPLE_PGN = `[Event "Paris Opera"]
 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0`;
 
 const $ = id => document.getElementById(id);
-const S = {game:null, ply:0, flipped:false, evals:[], info:[], running:false, cancel:false, games:[], selUrl:null};
+const S = {game:null, ply:0, flipped:false, evals:[], info:[], running:false, cancel:false, games:[], selUrl:null, v:null, sel:null};
 
 /* ---------- Mathe ---------- */
 const winPct = cp => { const c = Math.max(-1000, Math.min(1000, cp)); return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * c)) - 1); };
@@ -293,18 +316,17 @@ class Engine{
     };
   }
 }
+// Lokale Engine aus dem Repo (GitHub Pages); bei Doppelklick-Start (file://) Fallback aus dem Netz
+async function makeEngine(){
+  if (location.protocol !== "file:"){
+    const e = new Engine(true);
+    try { await e.init(); return e; } catch(err){ try { e.w.terminate(); } catch(_){} }
+  }
+  const e = new Engine(false); await e.init(); return e;
+}
 let engine = null, engineReady = null;
 function getEngine(){
-  if (!engineReady){
-    engineReady = (async () => {
-      // Lokale Engine aus dem Repo (GitHub Pages); bei Doppelklick-Start (file://) Fallback aus dem Netz
-      if (location.protocol !== "file:"){
-        try { engine = new Engine(true); await engine.init(); return; }
-        catch(e){ try { engine.w.terminate(); } catch(_){} }
-      }
-      engine = new Engine(false); await engine.init();
-    })();
-  }
+  if (!engineReady) engineReady = makeEngine().then(e => { engine = e; });
   return engineReady;
 }
 
@@ -328,7 +350,7 @@ function parseGame(pgn){
 }
 function setGame(g, flipped){
   stopAnalysis();
-  S.game = g; S.ply = 0; S.flipped = !!flipped; S.evals = []; S.info = [];
+  S.game = g; S.ply = 0; S.flipped = !!flipped; S.evals = []; S.info = []; S.v = null; S.sel = null;
   $("anMsg").textContent = `${g.moves.length} Halbzüge geladen.`;
   render();
 }
@@ -341,6 +363,7 @@ async function runAnalysis(){
   S.running = true; S.cancel = false; S.evals = new Array(g.fens.length).fill(null); S.info = [];
   $("bAnalyse").disabled = true; $("bCancel").hidden = false; $("progress").hidden = false;
   $("anMsg").textContent = "Engine wird geladen …";
+  liveRequest(null);
   try{
     await getEngine();
     engine.send("ucinewgame");
@@ -369,6 +392,7 @@ async function runAnalysis(){
     S.running = false; S.cancel = false;
     $("bAnalyse").disabled = false; $("bCancel").hidden = true;
     setTimeout(() => { if (!S.running) $("progress").hidden = true; }, 800);
+    liveRequest(curFen());
   }
 }
 function computeInfo(){
@@ -388,19 +412,28 @@ function computeInfo(){
 }
 
 /* ---------- Darstellung ---------- */
-function render(){ renderBoard(); renderNav(); renderComment(); renderGraph(); renderPlayers(); renderMoves(); }
+function render(){ renderBoard(); renderNav(); renderComment(); renderGraph(); renderPlayers(); renderMoves(); liveRequest(curFen()); }
+const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+function curFen(){ if (!S.game) return START_FEN; return S.v ? S.v.fens[S.v.idx] : S.game.fens[S.ply]; }
+function curLast(){
+  if (S.v) return S.v.idx > 0 ? S.v.moves[S.v.idx - 1] : (S.v.base > 0 ? S.game.moves[S.v.base - 1] : null);
+  return S.game && S.ply > 0 ? S.game.moves[S.ply - 1] : null;
+}
+function moveLabel(fen, san){ const p = fen.split(" "); return p[1] === "w" ? `${p[5]}. ${san}` : `${p[5]}… ${san}`; }
 
 function sqPos(sq){
   const f = FILES.indexOf(sq[0]), r = 8 - parseInt(sq[1], 10);
   return S.flipped ? {x:7 - f, y:7 - r} : {x:f, y:r};
 }
 function renderBoard(){
-  const g = S.game, fen = g ? g.fens[S.ply] : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const g = S.game, fen = curFen();
   const rows = fen.split(" ")[0].split("/");
   const grid = [];
   rows.forEach(row => { const out = []; for (const ch of row){ if (/\d/.test(ch)) for (let k = 0; k < +ch; k++) out.push(null); else out.push(ch); } grid.push(out); });
-  const last = g && S.ply > 0 ? g.moves[S.ply - 1] : null;
-  const info = S.ply > 0 ? S.info[S.ply - 1] : null;
+  const last = curLast();
+  const info = !S.v && S.ply > 0 ? S.info[S.ply - 1] : null;
+  let targets = {};
+  if (S.sel){ new Chess(fen).moves({square:S.sel, verbose:true}).forEach(m => { targets[m.to] = true; }); }
   let html = "";
   for (let vy = 0; vy < 8; vy++) for (let vx = 0; vx < 8; vx++){
     const r = S.flipped ? 7 - vy : vy, f = S.flipped ? 7 - vx : vx;
@@ -412,15 +445,16 @@ function renderBoard(){
     if (vx === 0) inner += `<span class="co r">${8 - r}</span>`;
     if (vy === 7) inner += `<span class="co f">${FILES[f]}</span>`;
     if (info && last.to === sq) inner += `<span class="badge-sq" style="background:${CLS[info.cls].color}">${CLS[info.cls].sym}</span>`;
-    html += `<div class="sq ${dark ? "d" : "l"}${isLast ? " last" : ""}">${inner}</div>`;
+    html += `<div class="sq ${dark ? "d" : "l"}${isLast ? " last" : ""}${S.sel === sq ? " sel" : ""}${targets[sq] ? " tgt" + (p ? " cap" : "") : ""}" data-sq="${sq}">${inner}</div>`;
   }
   // Pfeil: besserer Zug, wenn der gespielte nicht der beste war
   let arrow = "";
   if (info && info.bestUci && info.cls !== "best" && info.cls !== "excellent") arrow = arrowSvg(info.bestUci, "#1f9a6b");
+  else if (Live.cur === fen && Live.lines[0] && Live.lines[0].uci) arrow = arrowSvg(Live.lines[0].uci, "#3b78b8");
   html += `<svg class="arrows" viewBox="0 0 8 8">${arrow}</svg>`;
   $("board").innerHTML = html;
 
-  const ev = g && S.evals[S.ply];
+  const ev = S.v ? (Live.cur === fen && Live.lines[0] ? Live.lines[0] : null) : (g && S.evals[S.ply]);
   const win = ev ? ev.win : 50;
   $("evalw").style.height = win + "%";
   $("evalbar").classList.toggle("flip", S.flipped);
@@ -444,6 +478,12 @@ function arrowSvg(uci, color){
 function renderNav(){
   const g = S.game;
   const n = g ? g.moves.length : 0;
+  if (S.v){
+    $("bStart").disabled = false; $("bPrev").disabled = false;
+    $("bEnd").disabled = $("bNext").disabled = S.v.idx >= S.v.moves.length;
+    $("plyinfo").textContent = S.v.idx ? "Variante: " + moveLabel(S.v.fens[S.v.idx - 1], S.v.moves[S.v.idx - 1].san) : "Variante";
+    return;
+  }
   $("bStart").disabled = $("bPrev").disabled = S.ply === 0;
   $("bEnd").disabled = $("bNext").disabled = S.ply >= n;
   if (!g || S.ply === 0) { $("plyinfo").textContent = "Startstellung"; return; }
@@ -453,6 +493,14 @@ function renderNav(){
 function renderComment(){
   const el = $("comment"), g = S.game;
   if (!g) { el.innerHTML = ""; return; }
+  if (S.v){
+    const parts = S.v.moves.map((m, i) => `<span class="${i + 1 === S.v.idx ? "cur" : ""}">${esc(moveLabel(S.v.fens[i], m.san))}</span>`).join("");
+    el.innerHTML = `<div class="sym" style="background:#3b78b8">↳</div><div style="min-width:0;flex:1"><div class="t1">Eigene Variante ab ${S.v.base ? esc(moveLabel(g.fens[S.v.base - 1], g.moves[S.v.base - 1].san)) : "Startstellung"}</div>
+      <div class="varbar">${parts}</div>
+      <div style="margin-top:8px"><button class="btn" id="bExitVar">Zurück zur Partie</button></div></div>`;
+    $("bExitVar").onclick = () => exitVar();
+    return;
+  }
   if (S.ply === 0){
     const ev = S.evals[0];
     el.innerHTML = `<div class="sym" style="background:var(--accent)">♙</div><div><div class="t1">${esc(g.white)} – ${esc(g.black)}</div>
@@ -522,7 +570,111 @@ function mvBtn(i){
 }
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
-function go(p){ if (!S.game) return; S.ply = Math.max(0, Math.min(S.game.moves.length, p)); render(); }
+function go(p){ if (!S.game) return; S.v = null; S.sel = null; S.ply = Math.max(0, Math.min(S.game.moves.length, p)); render(); }
+function exitVar(){ if (S.v) go(S.v.base); }
+function step(d){
+  if (S.v){
+    const i = S.v.idx + d;
+    if (i < 0) return exitVar();
+    S.v.idx = Math.min(S.v.moves.length, i); S.sel = null; render(); return;
+  }
+  go(S.ply + d);
+}
+
+/* ---------- Eigene Züge ---------- */
+function playMove(from, to){
+  if (!S.game) return false;
+  const fen = curFen(), c = new Chess(fen);
+  const mv = c.move({from, to, promotion:"q"});
+  if (!mv) return false;
+  const uci = mv.from + mv.to + (mv.promotion || "");
+  S.sel = null;
+  if (!S.v){
+    const next = S.game.moves[S.ply];
+    if (next && next.uci === uci){ go(S.ply + 1); return true; }
+    S.v = {base:S.ply, fens:[fen], moves:[], idx:0};
+  } else {
+    const nv = S.v.moves[S.v.idx];
+    if (nv && nv.uci === uci){ S.v.idx++; render(); return true; }
+    S.v.fens.length = S.v.idx + 1; S.v.moves.length = S.v.idx;
+  }
+  S.v.moves.push({san:mv.san, uci, from:mv.from, to:mv.to});
+  S.v.fens.push(c.fen()); S.v.idx++;
+  render(); return true;
+}
+function boardClick(sq){
+  if (!S.game) return;
+  const c = new Chess(curFen());
+  if (S.sel && S.sel !== sq && playMove(S.sel, sq)) return;
+  const p = c.get(sq);
+  S.sel = p && p.color === c.turn() && S.sel !== sq ? sq : null;
+  renderBoard();
+}
+
+/* ---------- Live-Engine (Top 3) ---------- */
+const Live = {on:true, eng:null, ready:null, busy:false, want:null, cur:null, lines:[], depth:0, raf:0};
+function liveRequest(fen){
+  if (!Live.on || S.running) fen = null;
+  if (fen === Live.want) return;
+  Live.want = fen;
+  if (fen !== Live.cur){
+    Live.cur = null; Live.lines = []; Live.depth = 0; liveRender();
+    if (Live.busy && Live.eng) Live.eng.send("stop");
+  }
+  if (fen && !Live.busy) liveLoop();
+}
+async function liveLoop(){
+  Live.busy = true;
+  try {
+    if (!Live.ready) Live.ready = makeEngine().then(e => { Live.eng = e; e.send("setoption name MultiPV value 3"); e.send("isready"); return e.until(l => l === "readyok"); });
+    await Live.ready;
+    while (Live.want && Live.want !== Live.cur){
+      const fen = Live.want; Live.cur = fen; Live.lines = []; Live.depth = 0;
+      const pos = new Chess(fen);
+      if (pos.game_over()){ liveRender(); continue; }
+      const sign = pos.turn() === "w" ? 1 : -1, e = Live.eng;
+      const f = l => {
+        if (Live.cur !== fen || !l.startsWith("info") || !l.includes(" pv ") || /bound/.test(l)) return;
+        const k = +(l.match(/ multipv (\d+)/) || [0, 1])[1];
+        const d = +(l.match(/ depth (\d+)/) || [0, 0])[1];
+        const sc = l.match(/score (cp|mate) (-?\d+)/); if (!sc) return;
+        const val = parseInt(sc[2], 10) * sign, uci = l.match(/ pv (.+)$/)[1].split(" ");
+        const line = sc[1] === "mate" ? {cp: val > 0 ? 10000 : -10000, mate:val, win: val > 0 ? 100 : 0} : {cp:val, mate:null, win:winPct(val)};
+        line.uci = uci[0]; line.pv = uci; line.depth = d;
+        Live.lines[k - 1] = line; if (k === 1) Live.depth = d;
+        if (!Live.raf) Live.raf = requestAnimationFrame(() => { Live.raf = 0; liveRender(); renderBoard(); });
+      };
+      e.ls.push(f);
+      e.send("position fen " + fen); e.send("go depth 22");
+      await e.until(l => l.startsWith("bestmove"));
+      e.ls = e.ls.filter(x => x !== f);
+    }
+  } catch(err){
+    $("lines").innerHTML = `<div class="empty">Engine konnte nicht starten.</div>`;
+  } finally { Live.busy = false; if (Live.want && Live.want !== Live.cur) liveLoop(); }
+}
+function pvSan(fen, pv){
+  const c = new Chess(fen), out = [];
+  for (const u of pv.slice(0, 10)){
+    const before = c.fen(), m = c.move({from:u.slice(0,2), to:u.slice(2,4), promotion:u[4]});
+    if (!m) break;
+    out.push(out.length === 0 || before.split(" ")[1] === "w" ? moveLabel(before, m.san) : m.san);
+  }
+  return out;
+}
+function liveRender(){
+  const el = $("lines"), fen = curFen();
+  $("bLive").textContent = Live.on ? "An" : "Aus"; $("bLive").setAttribute("aria-pressed", Live.on);
+  if (!Live.on){ el.innerHTML = `<div class="empty">Live-Engine ist ausgeschaltet.</div>`; $("liveDepth").textContent = ""; return; }
+  if (S.running){ el.innerHTML = `<div class="empty">Pausiert, solange die Partie analysiert wird.</div>`; $("liveDepth").textContent = ""; return; }
+  if (new Chess(fen).game_over()){ el.innerHTML = `<div class="empty">Partie beendet.</div>`; $("liveDepth").textContent = ""; return; }
+  $("liveDepth").textContent = Live.cur === fen && Live.depth ? "Tiefe " + Live.depth : "rechnet …";
+  if (Live.cur !== fen || !Live.lines.length){ el.innerHTML = `<div class="empty">Engine rechnet …</div>`; return; }
+  el.innerHTML = Live.lines.filter(Boolean).map((ln, i) => {
+    const sans = pvSan(fen, ln.pv);
+    return `<button class="line" data-uci="${ln.uci}"><span class="ev ${ln.win >= 50 ? "w" : "b"}">${fmtEval(ln)}</span><span class="pv"><b>${esc(sans[0] || "")}</b> ${esc(sans.slice(1).join(" "))}</span></button>`;
+  }).join("");
+}
 
 /* ---------- chess.com ---------- */
 const TC = {bullet:"Bullet", blitz:"Blitz", rapid:"Schnell", daily:"Täglich"};
@@ -568,9 +720,12 @@ function renderGames(){
 
 /* ---------- Ereignisse ---------- */
 $("bStart").onclick = () => go(0);
-$("bPrev").onclick = () => go(S.ply - 1);
-$("bNext").onclick = () => go(S.ply + 1);
-$("bEnd").onclick = () => go(Infinity);
+$("bPrev").onclick = () => step(-1);
+$("bNext").onclick = () => step(1);
+$("bEnd").onclick = () => { if (S.v){ S.v.idx = S.v.moves.length; render(); } else go(Infinity); };
+$("board").onclick = e => { const s = e.target.closest(".sq"); if (s) boardClick(s.dataset.sq); };
+$("lines").onclick = e => { const b = e.target.closest(".line"); if (b) playMove(b.dataset.uci.slice(0,2), b.dataset.uci.slice(2,4)); };
+$("bLive").onclick = () => { Live.on = !Live.on; if (!Live.on) liveRequest(null); else liveRequest(curFen()); liveRender(); };
 $("bFlip").onclick = () => { S.flipped = !S.flipped; render(); };
 $("bAnalyse").onclick = runAnalysis;
 $("bCancel").onclick = stopAnalysis;
@@ -582,8 +737,9 @@ $("graph").onclick = e => {
 };
 document.addEventListener("keydown", e => {
   if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-  if (e.key === "ArrowLeft") { go(S.ply - 1); e.preventDefault(); }
-  if (e.key === "ArrowRight") { go(S.ply + 1); e.preventDefault(); }
+  if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
+  if (e.key === "ArrowRight") { step(1); e.preventDefault(); }
+  if (e.key === "Escape") { if (S.v) exitVar(); else { S.sel = null; renderBoard(); } }
   if (e.key === "Home") go(0);
   if (e.key === "End") go(Infinity);
 });
