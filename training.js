@@ -87,6 +87,7 @@ class TBoard{
   constructor(el){
     this.el = el; this.fen = START_FEN; this.orient = "w"; this.sel = null; this.last = null;
     this.arrows = []; this.mark = null; this.enabled = false; this.onMove = null; this.drag = null;
+    this.draw = new Draw(el, (x, y) => this.sqAt(x, y), sq => this.xy(sq));
     this.bind(); this.render();
   }
   set(fen, o){
@@ -130,6 +131,7 @@ class TBoard{
       a += `<g opacity=".8"><line x1="${x1 + ux * .2}" y1="${y1 + uy * .2}" x2="${hx}" y2="${hy}" stroke="${col}" stroke-width=".17" stroke-linecap="round"/><polygon points="${x2 - ux * .08},${y2 - uy * .08} ${hx + px},${hy + py} ${hx - px},${hy - py}" fill="${col}"/></g>`;
     });
     h += `<svg class="arrows" viewBox="0 0 8 8">${a}</svg>`;
+    if (this.draw) h += this.draw.svg(this.fen);
     this.el.innerHTML = h;
   }
   tryMove(from, to){
