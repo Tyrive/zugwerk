@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zugwerk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: Brett + Bewertungskurve links, Import / Auswertung / Zugliste rechts; einspaltig am Handy */
+:root{
+  --bg:#edf1ed; --surface:#ffffff; --fg:#18221e; --muted:#5b6a63; --line:#d3dbd5; --accent:#2c6b58; --accent-fg:#ffffff;
+  --sq-light:#e4e8da; --sq-dark:#7b957e; --sq-last:rgba(232,196,72,.55); --coord:#40564a;
+  --g-white:#f4f6f3; --g-black:#2c3531;
+  --c-best:#1f9a6b; --c-excellent:#4fa36a; --c-good:#8a9f62; --c-inacc:#c9981c; --c-mistake:#dd7426; --c-blunder:#cf3c3c;
+  --font-ui:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111614; --surface:#19201d; --fg:#e3eae5; --muted:#93a39a; --line:#2a3530; --accent:#6cc1a0; --accent-fg:#0d1512;
+  --coord:#40564a; --g-white:#dfe5e0; --g-black:#232b28; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111614; --surface:#19201d; --fg:#e3eae5; --muted:#93a39a; --line:#2a3530; --accent:#6cc1a0; --accent-fg:#0d1512;
+  --coord:#40564a; --g-white:#dfe5e0; --g-black:#232b28; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--font-ui);
+  padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px));
+  padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(32px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:24px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-weight:800;font-size:1.6rem;letter-spacing:-.02em;margin:0}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:.9rem}
+h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px;font-weight:600}
+main{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;align-items:start}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+.col{display:grid;gap:20px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-width:0}
+
+/* Brett */
+.boardrow{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px}
+.evalbar{position:relative;border-radius:4px;overflow:hidden;background:var(--g-black);border:1px solid var(--line)}
+.evalbar .w{position:absolute;left:0;right:0;bottom:0;background:var(--g-white);transition:height .35s ease}
+.evalbar .lbl{position:absolute;left:0;right:0;font:600 9px/1 var(--font-mono);text-align:center;padding:4px 0}
+.evalbar.flip .w{top:0;bottom:auto}
+.board{position:relative;aspect-ratio:1;max-width:100%;display:grid;grid-template-columns:repeat(8,1fr);border-radius:6px;overflow:hidden;user-select:none}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;font-size:clamp(22px,7.6vw,52px);line-height:1}
+.sq.l{background:var(--sq-light)} .sq.d{background:var(--sq-dark)}
+.sq.last::after{content:"";position:absolute;inset:0;background:var(--sq-last)}
+.pc{position:relative;z-index:1;font-family:"Segoe UI Symbol","DejaVu Sans","Noto Sans Symbols 2",serif}
+.pc.w{color:#fbfbf7;-webkit-text-stroke:1.4px #1d2420;text-shadow:0 1px 1px rgba(0,0,0,.25)}
+.pc.b{color:#1d2420;-webkit-text-stroke:.6px #1d2420}
+.co{position:absolute;font:600 10px var(--font-mono);color:var(--coord);opacity:.85;z-index:1}
+.co.f{right:3px;bottom:2px} .co.r{left:3px;top:2px}
+.sq.d .co{color:var(--sq-light)}
+.arrows{position:absolute;inset:0;pointer-events:none;z-index:2}
+.badge-sq{position:absolute;top:-2px;right:-2px;z-index:3;min-width:20px;height:20px;padding:0 4px;border-radius:10px;font:700 11px/20px var(--font-mono);color:#fff;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+
+.nav{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
+.nav .btns{display:flex;gap:6px}
+button,select,input,textarea{font:inherit;color:inherit}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;min-width:42px}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.mv:focus-visible,.game:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.btn:disabled{opacity:.5;cursor:default}
+.plyinfo{font:600 .85rem var(--font-mono);color:var(--muted)}
+
+/* Kommentar zum aktuellen Zug */
+.comment{display:flex;gap:12px;align-items:flex-start;min-height:64px}
+.comment .sym{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;font:700 14px var(--font-mono)}
+.comment .t1{font-weight:700}
+.comment .t2{color:var(--muted);font-size:.9rem}
+.mono{font-family:var(--font-mono)}
+
+/* Kurve */
+.graph svg{display:block;width:100%;height:120px;border-radius:6px;cursor:pointer;background:var(--g-black)}
+
+/* Eingabe */
+.tabs{display:flex;gap:4px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;padding:8px 10px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:600}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row input{flex:1 1 180px;min-width:0}
+input,select,textarea{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:vertical}
+.msg{font-size:.88rem;color:var(--muted);margin-top:8px}
+.msg.err{color:var(--c-blunder)}
+.games{display:grid;gap:4px;margin-top:10px;max-height:300px;overflow:auto}
+.game{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:none;text-align:left;cursor:pointer;width:100%}
+.game:hover{border-color:var(--line);background:var(--bg)}
+.game.sel{border-color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--muted)}
+.dot.w{background:#f6f6f2} .dot.b{background:#222}
+.opp{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.opp small{color:var(--muted)}
+.res{font-weight:700;font-size:.82rem}
+.res.win{color:var(--c-best)} .res.loss{color:var(--c-blunder)} .res.draw{color:var(--muted)}
+.tc{color:var(--muted);font-size:.8rem}
+
+.analyse{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.analyse label{color:var(--muted);font-size:.88rem}
+.progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+
+/* Auswertung */
+.players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.player{min-width:0}
+.player .name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.player .acc{font:800 2rem/1.1 var(--font-ui);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.player .acc small{font-size:.8rem;color:var(--muted);font-weight:600}
+.counts{display:grid;gap:3px;margin-top:8px;font-size:.85rem}
+.counts div{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.counts b{font-variant-numeric:tabular-nums;font-family:var(--font-mono)}
+.chip{display:inline-block;min-width:26px;padding:1px 5px;border-radius:5px;color:#fff;font:700 11px/1.5 var(--font-mono);text-align:center}
+
+/* Zugliste */
+.moves{max-height:360px;overflow:auto;font-family:var(--font-mono);font-size:.9rem}
+.mrow{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(0,1fr);align-items:center}
+.mrow:nth-child(odd){background:color-mix(in srgb, var(--bg) 70%, transparent)}
+.mnum{color:var(--muted);padding-left:6px}
+.mv{display:flex;gap:6px;align-items:center;padding:5px 8px;border:0;background:none;cursor:pointer;text-align:left;border-radius:6px;font:inherit}
+.mv:hover{background:var(--bg)}
+.mv.cur{background:var(--accent);color:var(--accent-fg)}
+.mv .chip{min-width:22px;font-size:10px}
+.empty{color:var(--muted);font-size:.9rem}
+footer{color:var(--muted);font-size:.8rem;max-width:70ch}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Zug<span>werk</span></h1>
+    <div class="sub">Partieanalyse mit Stockfish, komplett im Browser</div>
+  </header>
+
+  <main>
+    <section class="col">
+      <div class="boardrow">
+        <div class="evalbar" id="evalbar"><div class="w" id="evalw" style="height:50%"></div><div class="lbl" id="evallbl"></div></div>
+        <div class="board" id="board"></div>
+      </div>
+      <div class="nav">
+        <div class="btns">
+          <button class="btn" id="bStart" aria-label="Zum Anfang">⏮</button>
+          <button class="btn" id="bPrev" aria-label="Zug zurück">◀</button>
+          <button class="btn" id="bNext" aria-label="Zug vor">▶</button>
+          <button class="btn" id="bEnd" aria-label="Zum Ende">⏭</button>
+        </div>
+        <span class="plyinfo" id="plyinfo">Startstellung</span>
+        <button class="btn" id="bFlip">Brett drehen</button>
+      </div>
+      <div class="panel comment" id="comment"></div>
+      <div class="graph"><h2>Bewertungsverlauf</h2><svg id="graph" viewBox="0 0 600 120" preserveAspectRatio="none" aria-label="Bewertungsverlauf"></svg></div>
+    </section>
+
+    <section class="col">
+      <div class="panel">
+        <div class="tabs" role="tablist">
+          <button class="tab" role="tab" id="tabCc" aria-selected="true">chess.com</button>
+          <button class="tab" role="tab" id="tabPgn" aria-selected="false">PGN einfügen</button>
+        </div>
+        <div id="paneCc">
+          <form class="row" id="ccForm">
+            <input id="ccUser" placeholder="chess.com-Benutzername" autocomplete="off" spellcheck="false">
+            <button class="btn primary" type="submit">Partien laden</button>
+          </form>
+          <div class="msg" id="ccMsg">Lädt deine letzten Partien über die öffentliche chess.com-API.</div>
+          <div class="games" id="games"></div>
+        </div>
+        <div id="panePgn" hidden>
+          <textarea id="pgnText" spellcheck="false" placeholder="[Event &quot;…&quot;]&#10;1. e4 e5 2. Nf3 …"></textarea>
+          <div class="row" style="margin-top:8px"><button class="btn primary" id="pgnLoad">PGN übernehmen</button></div>
+          <div class="msg" id="pgnMsg"></div>
+        </div>
+        <div class="analyse">
+          <label for="depth">Tiefe</label>
+          <select id="depth">
+            <option value="12">12 · schnell</option>
+            <option value="16" selected>16 · Standard</option>
+            <option value="20">20 · genau (langsam)</option>
+          </select>
+          <button class="btn primary" id="bAnalyse">Analysieren</button>
+          <button class="btn" id="bCancel" hidden>Abbrechen</button>
+          <span class="msg" id="anMsg" style="margin:0"></span>
+        </div>
+        <div class="progress" id="progress" hidden><i id="progressBar"></i></div>
+      </div>
+
+      <div class="panel">
+        <h2>Auswertung</h2>
+        <div class="players" id="players"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Züge</h2>
+        <div class="moves" id="moves"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Pfeiltasten ← → zum Navigieren.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
+"use strict";
+const SF_URL = "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js";
+const FILES = "abcdefgh";
+const GLYPH = {k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
+const CLS = {
+  best:      {label:"Bester Zug",    sym:"★", color:"var(--c-best)"},
+  excellent: {label:"Exzellent",     sym:"!",      color:"var(--c-excellent)"},
+  good:      {label:"Gut",           sym:"✓", color:"var(--c-good)"},
+  inacc:     {label:"Ungenauigkeit", sym:"?!",     color:"var(--c-inacc)"},
+  mistake:   {label:"Fehler",        sym:"?",      color:"var(--c-mistake)"},
+  blunder:   {label:"Patzer",        sym:"??",     color:"var(--c-blunder)"}
+};
+const ORDER = ["best","excellent","good","inacc","mistake","blunder"];
+const SAMPLE_PGN = `[Event "Paris Opera"]
+[White "Paul Morphy"]
+[Black "Herzog Karl / Graf Isouard"]
+[Result "1-0"]
+[Date "1858.??.??"]
+
+1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7
+8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7
+14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0`;
+
+const $ = id => document.getElementById(id);
+const S = {game:null, ply:0, flipped:false, evals:[], info:[], running:false, cancel:false, games:[], selUrl:null};
+
+/* ---------- Mathe ---------- */
+const winPct = cp => { const c = Math.max(-1000, Math.min(1000, cp)); return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * c)) - 1); };
+const moveAcc = loss => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * loss) - 3.1669));
+function classify(loss, isBest){
+  if (isBest) return "best";
+  if (loss < 2) return "excellent";
+  if (loss < 5) return "good";
+  if (loss < 10) return "inacc";
+  if (loss < 15) return "mistake";
+  return "blunder";
+}
+function fmtEval(e){
+  if (!e) return "–";
+  if (e.mate !== null) return (e.mate > 0 ? "#" : "#-") + Math.abs(e.mate);
+  const v = e.cp / 100;
+  return (v > 0 ? "+" : "") + v.toFixed(1);
+}
+
+/* ---------- Engine ---------- */
+const SF_LOCAL = "engine/stockfish-19-lite-single.js";
+class Engine{
+  constructor(local){
+    this.name = local ? "Stockfish 19 (WebAssembly)" : "Stockfish 10 (Fallback)";
+    if (local) this.w = new Worker(SF_LOCAL);
+    else {
+      const blob = new Blob([`importScripts("${SF_URL}");`], {type:"application/javascript"});
+      this.w = new Worker(URL.createObjectURL(blob));
+    }
+    this.ls = [];
+    this.w.onmessage = e => { const line = String(e.data); this.ls.slice().forEach(f => f(line)); };
+  }
+  send(c){ this.w.postMessage(c); }
+  until(pred){ return new Promise(res => { const f = l => { if (pred(l)) { this.ls = this.ls.filter(x => x !== f); res(l); } }; this.ls.push(f); }); }
+  async init(){
+    const failed = new Promise((_, rej) => {
+      this.w.onerror = () => rej(new Error("Engine-Datei nicht gefunden"));
+      setTimeout(() => rej(new Error("Engine antwortet nicht")), 15000);
+    });
+    this.send("uci"); await Promise.race([this.until(l => l === "uciok"), failed]);
+    this.send("setoption name Hash value 64");
+    this.send("ucinewgame"); this.send("isready"); await this.until(l => l === "readyok");
+  }
+  async analyse(fen, depth){
+    let last = null;
+    const f = l => { if (l.startsWith("info") && l.includes(" score ") && !/bound/.test(l)) last = l; };
+    this.ls.push(f);
+    this.send("position fen " + fen);
+    this.send("go depth " + depth);
+    const bm = await this.until(l => l.startsWith("bestmove"));
+    this.ls = this.ls.filter(x => x !== f);
+    const m = last && last.match(/score (cp|mate) (-?\d+)/);
+    const pv = last && last.match(/ pv (.+)$/);
+    return {
+      type: m ? m[1] : "cp", val: m ? parseInt(m[2], 10) : 0,
+      best: bm.split(" ")[1],
+      pv: pv ? pv[1].split(" ") : []
+    };
+  }
+}
+let engine = null, engineReady = null;
+function getEngine(){
+  if (!engineReady){
+    engineReady = (async () => {
+      // Lokale Engine aus dem Repo (GitHub Pages); bei Doppelklick-Start (file://) Fallback aus dem Netz
+      if (location.protocol !== "file:"){
+        try { engine = new Engine(true); await engine.init(); return; }
+        catch(e){ try { engine.w.terminate(); } catch(_){} }
+      }
+      engine = new Engine(false); await engine.init();
+    })();
+  }
+  return engineReady;
+}
+
+/* ---------- Partie laden ---------- */
+function parseGame(pgn){
+  const c = new Chess();
+  const clean = pgn.replace(/\r/g, "").trim();
+  if (!c.load_pgn(clean, {sloppy:true})) throw new Error("PGN konnte nicht gelesen werden.");
+  const h = c.header();
+  const hist = c.history({verbose:true});
+  const r = new Chess();
+  if (h.FEN) r.load(h.FEN);
+  const fens = [r.fen()], moves = [];
+  for (const m of hist){
+    const mv = r.move({from:m.from, to:m.to, promotion:m.promotion});
+    moves.push({san:mv.san, uci:mv.from + mv.to + (mv.promotion || ""), color:mv.color, from:mv.from, to:mv.to});
+    fens.push(r.fen());
+  }
+  return {fens, moves, white:h.White || "Weiß", black:h.Black || "Schwarz",
+          wElo:h.WhiteElo || "", bElo:h.BlackElo || "", result:h.Result || "*"};
+}
+function setGame(g, flipped){
+  stopAnalysis();
+  S.game = g; S.ply = 0; S.flipped = !!flipped; S.evals = []; S.info = [];
+  $("anMsg").textContent = `${g.moves.length} Halbzüge geladen.`;
+  render();
+}
+
+/* ---------- Analyse ---------- */
+function stopAnalysis(){ if (S.running){ S.cancel = true; if (engine) engine.send("stop"); } }
+async function runAnalysis(){
+  if (!S.game || S.running) return;
+  const g = S.game, depth = parseInt($("depth").value, 10);
+  S.running = true; S.cancel = false; S.evals = new Array(g.fens.length).fill(null); S.info = [];
+  $("bAnalyse").disabled = true; $("bCancel").hidden = false; $("progress").hidden = false;
+  $("anMsg").textContent = "Engine wird geladen …";
+  try{
+    await getEngine();
+    engine.send("ucinewgame");
+    for (let i = 0; i < g.fens.length; i++){
+      if (S.cancel || S.game !== g) break;
+      $("anMsg").textContent = `Stellung ${i + 1} von ${g.fens.length}`;
+      const fen = g.fens[i], pos = new Chess(fen), stm = pos.turn();
+      let ev;
+      if (pos.in_checkmate()) ev = {cp:0, mate:0, win: stm === "w" ? 0 : 100, best:null, pv:[]};
+      else if (pos.in_stalemate()) ev = {cp:0, mate:null, win:50, best:null, pv:[]};
+      else {
+        const r = await engine.analyse(fen, depth);
+        if (S.game !== g) break;
+        const sign = stm === "w" ? 1 : -1;
+        if (r.type === "mate"){ const m = r.val * sign; ev = {cp: m > 0 ? 10000 : -10000, mate:m, win: m > 0 ? 100 : 0, best:r.best, pv:r.pv}; }
+        else { const cp = r.val * sign; ev = {cp, mate:null, win:winPct(cp), best:r.best, pv:r.pv}; }
+      }
+      S.evals[i] = ev;
+      $("progressBar").style.width = ((i + 1) / g.fens.length * 100) + "%";
+      computeInfo(); render();
+    }
+    $("anMsg").textContent = S.cancel ? "Analyse abgebrochen." : `Fertig (Tiefe ${depth}, ${engine.name}).`;
+  } catch(e){
+    $("anMsg").textContent = "Engine konnte nicht starten: " + e.message;
+  } finally {
+    S.running = false; S.cancel = false;
+    $("bAnalyse").disabled = false; $("bCancel").hidden = true;
+    setTimeout(() => { if (!S.running) $("progress").hidden = true; }, 800);
+  }
+}
+function computeInfo(){
+  const g = S.game; S.info = [];
+  for (let i = 0; i < g.moves.length; i++){
+    const a = S.evals[i], b = S.evals[i + 1];
+    if (!a || !b) { S.info.push(null); continue; }
+    const mv = g.moves[i], white = mv.color === "w";
+    const before = white ? a.win : 100 - a.win, after = white ? b.win : 100 - b.win;
+    const loss = Math.max(0, before - after);
+    let bestSan = null;
+    if (a.best){
+      try { const c = new Chess(g.fens[i]); const r = c.move({from:a.best.slice(0,2), to:a.best.slice(2,4), promotion:a.best[4]}); bestSan = r && r.san; } catch(e){}
+    }
+    S.info.push({loss, acc:moveAcc(loss), cls:classify(loss, a.best === mv.uci), bestSan, bestUci:a.best, bestEval:a});
+  }
+}
+
+/* ---------- Darstellung ---------- */
+function render(){ renderBoard(); renderNav(); renderComment(); renderGraph(); renderPlayers(); renderMoves(); }
+
+function sqPos(sq){
+  const f = FILES.indexOf(sq[0]), r = 8 - parseInt(sq[1], 10);
+  return S.flipped ? {x:7 - f, y:7 - r} : {x:f, y:r};
+}
+function renderBoard(){
+  const g = S.game, fen = g ? g.fens[S.ply] : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const rows = fen.split(" ")[0].split("/");
+  const grid = [];
+  rows.forEach(row => { const out = []; for (const ch of row){ if (/\d/.test(ch)) for (let k = 0; k < +ch; k++) out.push(null); else out.push(ch); } grid.push(out); });
+  const last = g && S.ply > 0 ? g.moves[S.ply - 1] : null;
+  const info = S.ply > 0 ? S.info[S.ply - 1] : null;
+  let html = "";
+  for (let vy = 0; vy < 8; vy++) for (let vx = 0; vx < 8; vx++){
+    const r = S.flipped ? 7 - vy : vy, f = S.flipped ? 7 - vx : vx;
+    const sq = FILES[f] + (8 - r), p = grid[r][f];
+    const dark = (r + f) % 2 === 1;
+    const isLast = last && (last.from === sq || last.to === sq);
+    let inner = "";
+    if (p){ const w = p === p.toUpperCase(); inner += `<span class="pc ${w ? "w" : "b"}">${GLYPH[p.toLowerCase()]}︎</span>`; }
+    if (vx === 0) inner += `<span class="co r">${8 - r}</span>`;
+    if (vy === 7) inner += `<span class="co f">${FILES[f]}</span>`;
+    if (info && last.to === sq) inner += `<span class="badge-sq" style="background:${CLS[info.cls].color}">${CLS[info.cls].sym}</span>`;
+    html += `<div class="sq ${dark ? "d" : "l"}${isLast ? " last" : ""}">${inner}</div>`;
+  }
+  // Pfeil: besserer Zug, wenn der gespielte nicht der beste war
+  let arrow = "";
+  if (info && info.bestUci && info.cls !== "best" && info.cls !== "excellent") arrow = arrowSvg(info.bestUci, "#1f9a6b");
+  html += `<svg class="arrows" viewBox="0 0 8 8">${arrow}</svg>`;
+  $("board").innerHTML = html;
+
+  const ev = g && S.evals[S.ply];
+  const win = ev ? ev.win : 50;
+  $("evalw").style.height = win + "%";
+  $("evalbar").classList.toggle("flip", S.flipped);
+  const lbl = $("evallbl");
+  lbl.textContent = ev ? fmtEval(ev).replace("+", "") : "";
+  const whiteAhead = win >= 50;
+  // Label am Ende der führenden Seite
+  const atBottom = whiteAhead !== S.flipped;
+  lbl.style.top = atBottom ? "auto" : "0"; lbl.style.bottom = atBottom ? "0" : "auto";
+  lbl.style.color = whiteAhead ? "#1d2420" : "#f4f6f3";
+}
+function arrowSvg(uci, color){
+  const a = sqPos(uci.slice(0,2)), b = sqPos(uci.slice(2,4));
+  const x1 = a.x + .5, y1 = a.y + .5, x2 = b.x + .5, y2 = b.y + .5;
+  const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+  const hx = x2 - ux * .42, hy = y2 - uy * .42; // Ansatz Pfeilspitze
+  const px = -uy * .22, py = ux * .22;
+  return `<g opacity=".82"><line x1="${x1 + ux * .2}" y1="${y1 + uy * .2}" x2="${hx}" y2="${hy}" stroke="${color}" stroke-width=".17" stroke-linecap="round"/>` +
+         `<polygon points="${x2 - ux * .08},${y2 - uy * .08} ${hx + px},${hy + py} ${hx - px},${hy - py}" fill="${color}"/></g>`;
+}
+function renderNav(){
+  const g = S.game;
+  const n = g ? g.moves.length : 0;
+  $("bStart").disabled = $("bPrev").disabled = S.ply === 0;
+  $("bEnd").disabled = $("bNext").disabled = S.ply >= n;
+  if (!g || S.ply === 0) { $("plyinfo").textContent = "Startstellung"; return; }
+  const m = g.moves[S.ply - 1];
+  $("plyinfo").textContent = `${Math.ceil(S.ply / 2)}${m.color === "w" ? "." : "…"} ${m.san}`;
+}
+function renderComment(){
+  const el = $("comment"), g = S.game;
+  if (!g) { el.innerHTML = ""; return; }
+  if (S.ply === 0){
+    const ev = S.evals[0];
+    el.innerHTML = `<div class="sym" style="background:var(--accent)">♙</div><div><div class="t1">${esc(g.white)} – ${esc(g.black)}</div>
+      <div class="t2">${ev ? "Startbewertung " + fmtEval(ev) : "Klicke auf „Analysieren“, um alle Züge bewerten zu lassen."}</div></div>`;
+    return;
+  }
+  const m = g.moves[S.ply - 1], info = S.info[S.ply - 1], ev = S.evals[S.ply];
+  const mvTxt = `${Math.ceil(S.ply / 2)}${m.color === "w" ? "." : "…"} ${m.san}`;
+  if (!info){
+    el.innerHTML = `<div class="sym" style="background:var(--muted)">·</div><div><div class="t1 mono">${mvTxt}</div><div class="t2">${S.running ? "Wird noch analysiert …" : "Noch nicht analysiert."}</div></div>`;
+    return;
+  }
+  const c = CLS[info.cls];
+  let t2 = `Bewertung danach <span class="mono">${fmtEval(ev)}</span> · Zuggenauigkeit ${Math.round(info.acc)} %`;
+  if (info.cls !== "best" && info.bestSan) t2 += `<br>Besser war <b class="mono">${info.bestSan}</b> <span class="mono">(${fmtEval(info.bestEval)})</span> – grüner Pfeil`;
+  el.innerHTML = `<div class="sym" style="background:${c.color}">${c.sym}</div><div><div class="t1"><span class="mono">${mvTxt}</span> ist ${info.cls === "best" ? "der beste Zug" : c.label === "Gut" || c.label === "Exzellent" ? c.label.toLowerCase() : "ein" + (info.cls === "inacc" ? "e " : " ") + c.label}</div><div class="t2">${t2}</div></div>`;
+}
+function renderGraph(){
+  const svg = $("graph"), g = S.game, W = 600, H = 120;
+  if (!g) { svg.innerHTML = ""; return; }
+  const n = g.fens.length, step = W / Math.max(1, n - 1);
+  const pts = [];
+  for (let i = 0; i < n; i++){ const e = S.evals[i]; if (!e) break; pts.push([i * step, H - e.win / 100 * H]); }
+  let s = `<line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke" opacity=".6"/>`;
+  if (pts.length > 1){
+    const d = `M0,${H} ` + pts.map(p => `L${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + ` L${pts[pts.length - 1][0].toFixed(1)},${H} Z`;
+    s += `<path d="${d}" fill="var(--g-white)"/>`;
+  }
+  S.info.forEach((inf, i) => {
+    if (!inf || !["inacc","mistake","blunder"].includes(inf.cls) || !pts[i + 1]) return;
+    s += `<circle cx="${pts[i + 1][0]}" cy="${pts[i + 1][1]}" r="4" fill="${CLS[inf.cls].color}" stroke="var(--surface)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>`;
+  });
+  const cx = S.ply * step;
+  s += `<line x1="${cx}" y1="0" x2="${cx}" y2="${H}" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  svg.innerHTML = s;
+}
+function renderPlayers(){
+  const g = S.game, el = $("players");
+  if (!g) { el.innerHTML = ""; return; }
+  const side = col => {
+    const inf = S.info.filter((x, i) => x && g.moves[i].color === col);
+    const acc = inf.length ? inf.reduce((a, x) => a + x.acc, 0) / inf.length : null;
+    const cnt = {}; ORDER.forEach(k => cnt[k] = 0); inf.forEach(x => cnt[x.cls]++);
+    const name = col === "w" ? g.white : g.black, elo = col === "w" ? g.wElo : g.bElo;
+    return `<div class="player"><div class="name"><span class="dot ${col}"></span>${esc(name)}${elo ? ` <small class="sub">(${esc(elo)})</small>` : ""}</div>
+      <div class="acc">${acc === null ? "–" : acc.toFixed(1)}<small> % Genauigkeit</small></div>
+      <div class="counts">${ORDER.map(k => `<div><span class="chip" style="background:${CLS[k].color}">${CLS[k].sym}</span><span>${CLS[k].label}</span><b>${inf.length ? cnt[k] : "–"}</b></div>`).join("")}</div></div>`;
+  };
+  el.innerHTML = side("w") + side("b");
+}
+function renderMoves(){
+  const g = S.game, el = $("moves");
+  if (!g || !g.moves.length) { el.innerHTML = `<div class="empty">Noch keine Partie geladen.</div>`; return; }
+  let html = "";
+  for (let i = 0; i < g.moves.length; i += 2){
+    html += `<div class="mrow"><span class="mnum">${i / 2 + 1}.</span>${mvBtn(i)}${g.moves[i + 1] ? mvBtn(i + 1) : "<span></span>"}</div>`;
+  }
+  html += `<div class="mrow"><span></span><span class="mnum" style="padding:6px 8px">${esc(g.result)}</span></div>`;
+  el.innerHTML = html;
+  const cur = el.querySelector(".mv.cur");
+  if (cur){ const top = cur.offsetTop - el.offsetTop; if (top < el.scrollTop || top > el.scrollTop + el.clientHeight - 30) el.scrollTop = top - el.clientHeight / 2; }
+}
+function mvBtn(i){
+  const m = S.game.moves[i], inf = S.info[i];
+  const chip = inf && inf.cls !== "excellent" && inf.cls !== "good" ? `<span class="chip" style="background:${CLS[inf.cls].color}">${CLS[inf.cls].sym}</span>` : "";
+  return `<button class="mv${S.ply === i + 1 ? " cur" : ""}" data-ply="${i + 1}">${esc(m.san)}${chip}</button>`;
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function go(p){ if (!S.game) return; S.ply = Math.max(0, Math.min(S.game.moves.length, p)); render(); }
+
+/* ---------- chess.com ---------- */
+const TC = {bullet:"Bullet", blitz:"Blitz", rapid:"Schnell", daily:"Täglich"};
+const DRAWS = ["agreed","repetition","stalemate","insufficient","50move","timevsinsufficient"];
+async function loadChessCom(user){
+  const msg = $("ccMsg"), list = $("games");
+  msg.className = "msg"; msg.textContent = "Lade Partien …"; list.innerHTML = "";
+  try{
+    const r = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/archives`);
+    if (r.status === 404) throw new Error(`Spieler „${user}“ wurde auf chess.com nicht gefunden.`);
+    if (!r.ok) throw new Error(`chess.com antwortet mit Status ${r.status}.`);
+    const {archives} = await r.json();
+    if (!archives || !archives.length) throw new Error("Für diesen Spieler gibt es keine Partien.");
+    let games = [];
+    for (const a of archives.slice(-3).reverse()){
+      const res = await fetch(a); if (!res.ok) continue;
+      const d = await res.json(); games = games.concat(d.games || []);
+      if (games.length >= 30) break;
+    }
+    games = games.filter(x => x.rules === "chess" && x.pgn).sort((a, b) => b.end_time - a.end_time).slice(0, 40);
+    S.games = games.map(x => {
+      const meW = x.white.username.toLowerCase() === user;
+      const me = meW ? x.white : x.black, opp = meW ? x.black : x.white;
+      const out = me.result === "win" ? "win" : DRAWS.includes(me.result) ? "draw" : "loss";
+      return {url:x.url, pgn:x.pgn, meW, opp, out, tc:TC[x.time_class] || x.time_class, end:new Date(x.end_time * 1000)};
+    });
+    try { localStorage.setItem("zugwerk.user", user); } catch(e){}
+    msg.textContent = `${S.games.length} Partien gefunden. Wähle eine aus.`;
+    renderGames();
+  } catch(e){
+    msg.className = "msg err";
+    msg.textContent = (e instanceof TypeError ? "chess.com ist gerade nicht erreichbar. " : e.message + " ") + "PGN einfügen funktioniert immer.";
+  }
+}
+function renderGames(){
+  const RES = {win:"Sieg", loss:"Niederlage", draw:"Remis"};
+  $("games").innerHTML = S.games.map((x, i) => `<button class="game${S.selUrl === x.url ? " sel" : ""}" data-i="${i}">
+    <span class="dot ${x.meW ? "w" : "b"}" title="${x.meW ? "Du mit Weiß" : "Du mit Schwarz"}"></span>
+    <span class="opp">${esc(x.opp.username)} <small>${x.opp.rating}</small></span>
+    <span class="tc">${x.tc} · ${x.end.toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit"})}</span>
+    <span class="res ${x.out}">${RES[x.out]}</span></button>`).join("");
+}
+
+/* ---------- Ereignisse ---------- */
+$("bStart").onclick = () => go(0);
+$("bPrev").onclick = () => go(S.ply - 1);
+$("bNext").onclick = () => go(S.ply + 1);
+$("bEnd").onclick = () => go(Infinity);
+$("bFlip").onclick = () => { S.flipped = !S.flipped; render(); };
+$("bAnalyse").onclick = runAnalysis;
+$("bCancel").onclick = stopAnalysis;
+$("moves").onclick = e => { const b = e.target.closest(".mv"); if (b) go(+b.dataset.ply); };
+$("graph").onclick = e => {
+  if (!S.game) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  go(Math.round((e.clientX - r.left) / r.width * S.game.moves.length));
+};
+document.addEventListener("keydown", e => {
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (e.key === "ArrowLeft") { go(S.ply - 1); e.preventDefault(); }
+  if (e.key === "ArrowRight") { go(S.ply + 1); e.preventDefault(); }
+  if (e.key === "Home") go(0);
+  if (e.key === "End") go(Infinity);
+});
+function tab(which){
+  const cc = which === "cc";
+  $("tabCc").setAttribute("aria-selected", cc); $("tabPgn").setAttribute("aria-selected", !cc);
+  $("paneCc").hidden = !cc; $("panePgn").hidden = cc;
+}
+$("tabCc").onclick = () => tab("cc");
+$("tabPgn").onclick = () => tab("pgn");
+$("ccForm").onsubmit = e => { e.preventDefault(); const u = $("ccUser").value.trim().toLowerCase(); if (u) loadChessCom(u); };
+$("games").onclick = e => {
+  const b = e.target.closest(".game"); if (!b) return;
+  const x = S.games[+b.dataset.i];
+  try { S.selUrl = x.url; renderGames(); setGame(parseGame(x.pgn), !x.meW); runAnalysis(); }
+  catch(err){ $("ccMsg").className = "msg err"; $("ccMsg").textContent = err.message; }
+};
+$("pgnLoad").onclick = () => {
+  const m = $("pgnMsg");
+  try { setGame(parseGame($("pgnText").value), false); m.className = "msg"; m.textContent = "Partie übernommen."; }
+  catch(err){ m.className = "msg err"; m.textContent = err.message; }
+};
+
+/* ---------- Start ---------- */
+try { const u = localStorage.getItem("zugwerk.user"); if (u) $("ccUser").value = u; } catch(e){}
+$("pgnText").value = SAMPLE_PGN;
+setGame(parseGame(SAMPLE_PGN), false);
+$("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
+</script>
+</body>
+</html>
