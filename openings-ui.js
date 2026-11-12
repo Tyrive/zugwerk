@@ -236,6 +236,180 @@ function renderMoveListDrill(){
   el.innerHTML = h || '<div class="empty">Noch keine Züge.</div>';
 }
 
+
+/* ---------- Eigene Partien mit dieser Eröffnung ---------- */
+const OG = {games:null, user:"", sel:null};
+async function fetchRecentGames(user, months){
+  const r = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/archives`);
+  if (r.status === 404) throw new Error(`Spieler „${user}“ wurde auf chess.com nicht gefunden.`);
+  if (!r.ok) throw new Error(`chess.com antwortet mit Status ${r.status}.`);
+  const {archives} = await r.json();
+  let games = [];
+  for (const a of (archives || []).slice(-months).reverse()){
+    const res = await fetch(a); if (!res.ok) continue;
+    const d = await res.json(); games = games.concat(d.games || []);
+  }
+  return games.filter(g => g.rules === "chess" && g.pgn).sort((a, b) => b.end_time - a.end_time);
+}
+// Vergleicht eine Partie mit dem Repertoire: Wie lange war sie in der Theorie, und wer ist zuerst abgewichen?
+function compareWithTheory(op, sans, myColor){
+  const lines = allLines(op).filter(l => l.practice !== false).sort((a, b) => (a.set === "system" ? 0 : 1) - (b.set === "system" ? 0 : 1));
+  const path = [];
+  let best = lines[0], trap = null;
+  for (let i = 0; i < sans.length; i++){
+    const cands = lines.filter(l => { const mv = mvList(l); return path.every((s, k) => mv[k] === s) && mv.length > i; });
+    if (!cands.length) return {inTheory:i, dev:null, line:best, trap, end:true};
+    best = cands[0];
+    const s = sans[i], match = cands.find(l => mvList(l)[i] === s);
+    const mine = (i % 2 === 0) === (myColor === "w");
+    if (!match) return {inTheory:i, dev:{ply:i, by: mine ? "me" : "opp", played:s, expected:mvList(cands[0])[i]}, line:cands[0], trap};
+    best = match; path.push(s);
+    const c = op.comments[path.join(" ")] || "";
+    if (mine && !trap && /Fehler|Ungenau/.test(c)){
+      // Bessere Alternative aus dem Repertoire an derselben Stelle (ein Zug ohne Fehler-Kommentar)
+      const alt = [...new Set(cands.map(l => mvList(l)[i]))].find(m => m !== s && !/Fehler|Ungenau/.test(op.comments[[...path.slice(0, -1), m].join(" ")] || ""));
+      trap = {ply:i, text:c, played:s, better:alt || null};
+    }
+  }
+  return {inTheory:sans.length, dev:null, line:best, trap, end:false};
+}
+async function loadOpeningGames(){
+  const op = OP.op, inp = $("ogUser"), user = (inp.value || "").trim().toLowerCase(), msg = $("ogMsg");
+  if (!user){ msg.className = "msg err"; msg.textContent = "Bitte deinen chess.com-Namen eingeben."; return; }
+  try { localStorage.setItem("zugwerk.user", user); } catch(e){}
+  msg.className = "msg"; msg.textContent = "Lade deine Partien der letzten 3 Monate …"; $("ogList").innerHTML = "";
+  try {
+    const raw = await fetchRecentGames(user, 3), out = [];
+    for (const g of raw){
+      const meW = g.white.username.toLowerCase() === user;
+      let sans;
+      try { const c = new Chess(); if (!c.load_pgn(g.pgn, {sloppy:true})) continue; sans = c.history(); } catch(e){ continue; }
+      // Als Weiß: alles nach 1. e4 e5 2. Sf3 (dein Repertoire). Als Schwarz: wenn der Gegner Italienisch spielt.
+      const ok = meW ? sans.slice(0, 3).join(" ") === "e4 e5 Nf3" : sans.slice(0, 5).join(" ") === "e4 e5 Nf3 Nc6 Bc4";
+      if (!ok) continue;
+      const me = meW ? g.white : g.black, opp = meW ? g.black : g.white;
+      const res = me.result === "win" ? "win" : ["agreed","repetition","stalemate","insufficient","50move","timevsinsufficient"].includes(me.result) ? "draw" : "loss";
+      out.push({g, sans, meW, opp, res, cmp:compareWithTheory(op, sans, meW ? "w" : "b"), date:new Date(g.end_time * 1000)});
+      if (out.length >= 30) break;
+    }
+    OG.games = out; OG.user = user;
+    msg.textContent = out.length ? `${out.length} Partien mit dieser Eröffnung gefunden.` : "Keine Partien mit dieser Eröffnung in den letzten 3 Monaten gefunden.";
+    renderOpeningGames();
+  } catch(e){
+    msg.className = "msg err";
+    msg.textContent = e instanceof TypeError ? "chess.com ist gerade nicht erreichbar." : e.message;
+  }
+}
+function renderOpeningGames(){
+  const el = $("ogList"), gs = OG.games || [];
+  if (!gs.length){ el.innerHTML = ""; $("ogSummary").innerHTML = ""; return; }
+  // Zusammenfassung: wo weichst du am häufigsten ab?
+  const mine = gs.filter(x => x.cmp.dev && x.cmp.dev.by === "me");
+  const count = {};
+  mine.forEach(x => { const k = x.cmp.dev.ply + "|" + x.cmp.dev.played + "|" + x.cmp.dev.expected; count[k] = (count[k] || 0) + 1; });
+  const top = Object.entries(count).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const avg = Math.round(gs.reduce((a, x) => a + x.cmp.inTheory, 0) / gs.length / 2 * 10) / 10;
+  $("ogSummary").innerHTML = `<div class="stats">
+      <div><div class="big">${gs.length}</div><div class="muted">Partien</div></div>
+      <div><div class="big">${avg}</div><div class="muted">Züge in der Theorie (Schnitt)</div></div>
+      <div><div class="big">${mine.length}</div><div class="muted">selbst abgewichen</div></div></div>
+    ${top.length ? `<div class="ttext"><b>Deine häufigsten Abweichungen:</b><ul>${top.map(([k, n]) => { const [ply, p, e] = k.split("|"); return `<li>Zug ${Math.floor(+ply / 2) + 1}: <b class="mono">${esc(de(p))}</b> statt <b class="mono">${esc(de(e))}</b> (${n}×)</li>`; }).join("")}</ul></div>` : ""}`;
+  const RES = {win:"Sieg", loss:"Niederlage", draw:"Remis"};
+  el.innerHTML = gs.map((x, i) => {
+    const d = x.cmp.dev, n = d ? Math.floor(d.ply / 2) + 1 : 0;
+    const tag = x.cmp.trap ? `<span class="lt bad">Falle</span>` : d ? (d.by === "me" ? `<span class="lt bad">Du: Zug ${n}</span>` : `<span class="lt warn">Gegner: Zug ${n}</span>`) : `<span class="lt good">Theorie</span>`;
+    return `<button class="game${OG.sel === i ? " sel" : ""}" data-i="${i}" style="grid-template-columns:10px minmax(0,1fr) auto auto">
+      <span class="dot ${x.meW ? "w" : "b"}"></span>
+      <span class="opp">${esc(x.opp.username)} <small>${x.opp.rating}</small><br><small>${x.date.toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit"})} · <span class="res ${x.res}">${RES[x.res]}</span> · ${esc(x.cmp.line.name)}</small></span>
+      ${tag}<span></span></button>`;
+  }).join("");
+}
+function showOpeningGame(i, ply){
+  const x = OG.games[i]; if (!x) return;
+  clearTimeout(OP.timer);
+  OG.sel = i; OP.mode = "game"; OP.line = x.cmp.line;
+  const op = OP.op, d = x.cmp.dev, sans = x.sans;
+  const focus = ply != null ? ply : x.cmp.trap ? x.cmp.trap.ply : d ? d.ply : x.cmp.inTheory;
+  OG.ply = Math.max(0, Math.min(sans.length, focus));
+  const c = new Chess(); sans.slice(0, OG.ply).forEach(s => c.move(s));
+  const atDev = d && OG.ply === d.ply, tr = x.cmp.trap, atTrap = tr && OG.ply === tr.ply;
+  let arrows = [];
+  if (atTrap){
+    const t1 = new Chess(c.fen()), p = t1.move(tr.played);
+    if (p) arrows.push({u:p.from + p.to, c:"rgba(241,92,92,.85)"});
+    if (tr.better){ const t2 = new Chess(c.fen()), e = t2.move(tr.better); if (e) arrows.push({u:e.from + e.to, c:"rgba(129,182,76,.9)"}); }
+  }
+  if (atDev){
+    const t1 = new Chess(c.fen()), p = t1.move(d.played), t2 = new Chess(c.fen()), e = t2.move(d.expected);
+    if (p) arrows.push({u:p.from + p.to, c:"rgba(241,92,92,.85)"});
+    if (e) arrows.push({u:e.from + e.to, c:"rgba(129,182,76,.9)"});
+  }
+  let last = null;
+  if (OG.ply){ const t = new Chess(); sans.slice(0, OG.ply - 1).forEach(s => t.move(s)); const m = t.move(sans[OG.ply - 1]); last = {from:m.from, to:m.to}; }
+  OP.board.enabled = false;
+  OP.board.set(c.fen(), {orient: x.meW ? "w" : "b", last, arrows});
+  const n = Math.floor(OG.ply / 2) + 1;
+  let txt;
+  if (atDev && d.by === "me"){
+    const why = op.comments[[...sans.slice(0, d.ply), d.expected].join(" ")] || "";
+    txt = `<b>Hier hast du die Theorie verlassen.</b> Gespielt: <b class="mono">${esc(de(d.played))}</b> (rot). Richtig ist <b class="mono">${esc(de(d.expected))}</b> (grün). ${why}<div id="ogEng" class="texp"></div>`;
+  } else if (atDev){
+    txt = `<b>Hier hat dein Gegner die Theorie verlassen</b> mit <b class="mono">${esc(de(d.played))}</b>. In deinem Repertoire steht <b class="mono">${esc(de(d.expected))}</b>. Ab hier gilt der Plan: Figuren entwickeln, rochieren, Zentrum halten. Achte darauf, ob der Zug etwas einstellt.<div id="ogEng" class="texp"></div>`;
+  } else if (atTrap){
+    txt = `<b>Hier bist du in eine bekannte Falle gelaufen.</b> Gespielt: <b class="mono">${esc(de(tr.played))}</b> (rot). ${tr.text}${tr.better ? ` Besser ist <b class="mono">${esc(de(tr.better))}</b> (grün): ${op.comments[[...sans.slice(0, tr.ply), tr.better].join(" ")] || ""}` : ""} Klick auf ▶, um zu sehen, wie es weitergeht.`;
+  } else if (OG.ply <= x.cmp.inTheory){
+    const bf = (() => { const t = new Chess(); sans.slice(0, Math.max(0, OG.ply - 1)).forEach(s => t.move(s)); return t.fen(); })();
+    txt = (OG.ply ? `<b class="mono">${esc(moveLabel(bf, sans[OG.ply - 1]))}</b>: ` : "") + (commentFor(op, sans.slice(0, OG.ply), OG.ply ? ((OG.ply - 1) % 2 === 0) === x.meW : false)) + ` <span class="muted">(Theorie)</span>`;
+  } else {
+    txt = `Zug ${n}: Außerhalb der Theorie. Für eine genaue Bewertung öffne die Partie im Analysebrett.`;
+  }
+  const status = x.cmp.dev ? `${x.cmp.inTheory} Halbzüge nach Theorie` : `komplett nach Theorie (${x.cmp.inTheory} Halbzüge)`;
+  $("oPanel").innerHTML = `<div class="ttitle">Gegen ${esc(x.opp.username)} <span class="muted">· ${status}</span></div><div class="ttext">${txt}</div><div id="oFb" class="fb"></div>`;
+  // Engine: Was kostet die Abweichung bzw. was ist die beste Antwort?
+  if (atDev){
+    (async () => {
+      try {
+        const fen = c.fen();
+        if (d.by === "me"){
+          const wP = await moverWin(fen, uciOf(fen, d.played), 14), wE = await moverWin(fen, uciOf(fen, d.expected), 14);
+          const diff = Math.round(wE - wP);
+          const box = $("ogEng"); if (box && OG.sel === i && OG.ply === d.ply)
+            box.innerHTML = diff >= 3 ? `Stockfish: Dein Zug kostet etwa <b>${diff} %</b> Gewinnchance (${Math.round(wP)} % statt ${Math.round(wE)} %).` : `Stockfish: Dein Zug ist praktisch gleichwertig (${Math.round(wP)} % gegenüber ${Math.round(wE)} %). Trotzdem lohnt es sich, beim Repertoire zu bleiben.`;
+        } else {
+          const t = new Chess(fen); t.move(d.played);
+          const r = await search(t.fen(), 14), steps = walk(t.fen(), r.pv, 3);
+          const box = $("ogEng"); if (box && OG.sel === i && OG.ply === d.ply)
+            box.innerHTML = `Stockfish empfiehlt als Antwort: <b>${lineTxt(steps, 3)}</b>. Gewinnchance danach: ${Math.round(r.win)} % für dich.`;
+        }
+      } catch(e){}
+    })();
+  }
+  opControls([
+    {label:"◀", disabled: OG.ply === 0, fn:() => showOpeningGame(i, OG.ply - 1)},
+    {label:"▶", disabled: OG.ply >= sans.length, fn:() => showOpeningGame(i, OG.ply + 1)},
+    ...(d ? [{label:"Zur Abweichung", fn:() => showOpeningGame(i, d.ply)}] : []),
+    ...(tr ? [{label:"Zur Falle", fn:() => showOpeningGame(i, tr.ply)}] : []),
+    {label:"Variante lernen", primary:true, fn:() => learn(x.cmp.line.id, Math.min(d ? d.ply : x.cmp.inTheory, mvList(x.cmp.line).length))},
+    {label:"Partie analysieren", fn:() => { try { setGame(parseGame(x.g.pgn), !x.meW); S.me = x.meW ? "w" : "b"; location.hash = ""; setTimeout(() => { go(OG.ply); runAnalysis(); }, 50); } catch(e){} }}
+  ]);
+  // Zugliste: Theorie grün, Abweichung rot
+  let h = "";
+  sans.forEach((s, k) => {
+    if (k % 2 === 0) h += `<span class="mnum">${k / 2 + 1}.</span>`;
+    const cls = d && k === d.ply ? " dev" : k < x.cmp.inTheory ? " th" : "";
+    h += `<button class="omv${cls}${OG.ply === k + 1 ? " cur" : ""}" data-gply="${k + 1}">${esc(de(s))}</button>`;
+  });
+  $("oMoves").innerHTML = h;
+  renderOpeningGames();
+}
+function uciOf(fen, san){ const c = new Chess(fen), m = c.move(san); return m ? m.from + m.to + (m.promotion || "") : ""; }
+function initOpeningGames(){
+  let u = ""; try { u = localStorage.getItem("zugwerk.user") || ""; } catch(e){}
+  $("ogUser").value = u;
+  $("ogForm").onsubmit = e => { e.preventDefault(); loadOpeningGames(); };
+  $("ogList").onclick = e => { const b = e.target.closest(".game"); if (b) showOpeningGame(+b.dataset.i); };
+}
+
 /* ---------- Steuerung ---------- */
 function opControls(btns){
   $("oCtl").innerHTML = btns.map((b, i) => `<button class="btn${b.primary ? " primary" : ""}" data-i="${i}"${b.disabled ? " disabled" : ""}>${b.label}</button>`).join("");
@@ -253,9 +427,15 @@ function initOpenings(){
     if (b.dataset.act === "learn") learn(line.id, 0);
     if (b.dataset.act === "drill1") drill([line]);
   };
-  $("oMoves").onclick = e => { const b = e.target.closest(".omv[data-ply]"); if (b && OP.mode === "learn"){ OP.ply = +b.dataset.ply; showLearn(); } };
+  $("oMoves").onclick = e => {
+    const b = e.target.closest(".omv[data-ply]"); if (b && OP.mode === "learn"){ OP.ply = +b.dataset.ply; showLearn(); return; }
+    const g = e.target.closest(".omv[data-gply]"); if (g && OP.mode === "game") showOpeningGame(OG.sel, +g.dataset.gply);
+  };
+  initOpeningGames();
   document.addEventListener("keydown", e => {
-    if (document.body.dataset.view !== "openings" || OP.mode !== "learn" || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (document.body.dataset.view !== "openings" || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (OP.mode === "game"){ const g = OG.games[OG.sel]; if (e.key === "ArrowRight" && OG.ply < g.sans.length) showOpeningGame(OG.sel, OG.ply + 1); if (e.key === "ArrowLeft" && OG.ply > 0) showOpeningGame(OG.sel, OG.ply - 1); return; }
+    if (OP.mode !== "learn") return;
     if (e.key === "ArrowRight" && OP.ply < mvList(OP.line).length){ OP.ply++; showLearn(); e.preventDefault(); }
     if (e.key === "ArrowLeft" && OP.ply > 0){ OP.ply--; showLearn(); e.preventDefault(); }
   });

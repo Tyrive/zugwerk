@@ -66,7 +66,7 @@ main{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;a
 .co.f{right:3px;bottom:2px} .co.r{left:3px;top:2px}
 .sq.d .co{color:var(--sq-light)}
 .arrows{position:absolute;inset:0;pointer-events:none;z-index:2}
-.draw{position:absolute;inset:0;pointer-events:none;z-index:4}
+.drawlayer{position:absolute;inset:0;pointer-events:none;z-index:4}
 .sq.l.sel{background:var(--sq-last-l)} .sq.d.sel{background:var(--sq-last-d)}
 .sq.tgt::before{content:"";position:absolute;width:30%;height:30%;border-radius:50%;background:rgba(0,0,0,.16);z-index:2}
 .sq.tgt.cap::before{width:84%;height:84%;background:none;border:5px solid rgba(0,0,0,.16);box-sizing:border-box}
@@ -232,6 +232,11 @@ details ul{margin:.3em 0;padding-left:1.2em;display:grid;gap:4px}
 .omv{background:none;border:0;color:var(--fg);font:inherit;padding:3px 6px;border-radius:5px;cursor:pointer}
 .omv.cur{background:var(--accent);color:#fff}
 span.omv{cursor:default}
+.omv.th{color:var(--c-best)}
+.omv.dev{background:rgba(250,65,45,.18);color:var(--c-blunder);font-weight:700}
+.omv.cur.th,.omv.cur.dev{color:#fff}
+.lt.bad{color:var(--c-blunder)} .lt.good{color:var(--c-best)}
+#ogSummary .ttext ul{margin:.3em 0;padding-left:1.2em}
 .tips ol{margin:0;padding-left:1.2em;display:grid;gap:6px;font-size:.9rem;line-height:1.45}
 footer{color:var(--muted);font-size:.8rem;max-width:70ch}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
@@ -326,6 +331,15 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     </section>
     <section class="col">
       <div class="panel" id="oInfo"></div>
+      <div class="panel"><h2>Deine Partien mit dieser Eröffnung</h2>
+        <form class="row" id="ogForm">
+          <input id="ogUser" placeholder="chess.com-Benutzername" autocomplete="off" spellcheck="false">
+          <button class="btn primary" type="submit">Partien prüfen</button>
+        </form>
+        <div class="msg" id="ogMsg">Vergleicht deine Partien der letzten 3 Monate mit der Theorie.</div>
+        <div id="ogSummary" style="margin-top:12px"></div>
+        <div class="games" id="ogList"></div>
+      </div>
       <div class="panel"><h2>Varianten</h2><div id="oLines"></div></div>
       <div class="panel tips"><h2>So lernst du eine Eröffnung</h2>
         <ol>
@@ -775,10 +789,10 @@ class Draw{
     const list = this.arrows.slice();
     if (this.drag && this.drag.to !== this.drag.from) list.push(this.drag);
     list.forEach(a => { s += Draw.arrow(this.xy(a.from), this.xy(a.to), DRAW_COLORS[a.c]); });
-    return `<svg class="draw" viewBox="0 0 8 8">${s}</svg>`;
+    return `<svg class="drawlayer" viewBox="0 0 8 8">${s}</svg>`;
   }
   refresh(){
-    const old = this.el.querySelector("svg.draw");
+    const old = this.el.querySelector("svg.drawlayer");
     if (old) old.outerHTML = this.svg(); else this.el.insertAdjacentHTML("beforeend", this.svg());
   }
   static arrow(p1, p2, color){
@@ -1163,11 +1177,11 @@ $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
 $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
 </script>
-<script src="lessons.js?v=20261112d"></script>
-<script src="puzzles.js?v=20261112d"></script>
-<script src="openings.js?v=20261112d"></script>
-<script src="openings-ui.js?v=20261112d"></script>
-<script src="training.js?v=20261112d"></script>
-<script src="sync.js?v=20261112d"></script>
+<script src="lessons.js?v=20261112f"></script>
+<script src="puzzles.js?v=20261112f"></script>
+<script src="openings.js?v=20261112f"></script>
+<script src="openings-ui.js?v=20261112f"></script>
+<script src="training.js?v=20261112f"></script>
+<script src="sync.js?v=20261112f"></script>
 </body>
 </html>
