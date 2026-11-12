@@ -27,6 +27,98 @@ function commentFor(op, path, mine){
 }
 const isMine = (op, ply) => (ply % 2 === 0) === (op.side === "w"); // Zug Nummer ply (0-basiert) gehört mir?
 
+/* ---------- Was bewirkt ein Zug? (greift an, deckt, öffnet Linien, bereitet vor …) ---------- */
+const PNAME = {p:"Bauer", n:"Springer", b:"Läufer", r:"Turm", q:"Dame", k:"König"};
+const PACC = {p:"den Bauern", n:"den Springer", b:"den Läufer", r:"den Turm", q:"die Dame", k:"den König"};
+function boardOf(fen){
+  const b = {};
+  fen.split(" ")[0].split("/").forEach((row, r) => { let f = 0; for (const ch of row){ if (/\d/.test(ch)) f += +ch; else { b["abcdefgh"[f] + (8 - r)] = {t:ch.toLowerCase(), c: ch === ch.toUpperCase() ? "w" : "b"}; f++; } } });
+  return b;
+}
+// Felder, die eine Figur auf sq angreift (reine Geometrie, Blockaden berücksichtigt)
+function attacksFrom(bd, sq){
+  const p = bd[sq]; if (!p) return [];
+  const f = "abcdefgh".indexOf(sq[0]), r = +sq[1], out = [];
+  const on = (x, y) => x >= 0 && x < 8 && y >= 1 && y <= 8;
+  const name = (x, y) => "abcdefgh"[x] + y;
+  const step = d => d.forEach(([dx, dy]) => { if (on(f + dx, r + dy)) out.push(name(f + dx, r + dy)); });
+  const slide = d => d.forEach(([dx, dy]) => { let x = f + dx, y = r + dy; while (on(x, y)){ out.push(name(x, y)); if (bd[name(x, y)]) break; x += dx; y += dy; } });
+  if (p.t === "p") step(p.c === "w" ? [[-1, 1], [1, 1]] : [[-1, -1], [1, -1]]);
+  if (p.t === "n") step([[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]]);
+  if (p.t === "k") step([[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]]);
+  if (p.t === "b" || p.t === "q") slide([[1,1],[1,-1],[-1,1],[-1,-1]]);
+  if (p.t === "r" || p.t === "q") slide([[1,0],[-1,0],[0,1],[0,-1]]);
+  return out;
+}
+function canCastle(fen, col){
+  const f = fen.split(" "); f[1] = col; f[3] = "-";
+  const c = new Chess(); if (!c.load(f.join(" "))) return false;
+  return c.moves({verbose:true}).some(m => m.flags.includes("k") || m.flags.includes("q"));
+}
+function moveEffects(fenBefore, san){
+  const c = new Chess(fenBefore), m = c.move(san); if (!m) return [];
+  const after = c.fen(), b0 = boardOf(fenBefore), b1 = boardOf(after), col = m.color, opp = col === "w" ? "b" : "w";
+  const out = [];
+  if (m.flags.includes("k") || m.flags.includes("q")) out.push("bringt den König in Sicherheit und holt den Turm ins Spiel");
+  if (m.captured) out.push(`schlägt ${PACC[m.captured]} auf ${m.to}`);
+  if (m.san.includes("#")) out.push("setzt matt");
+  else if (m.san.includes("+")) out.push("gibt Schach");
+  const home = {w:["b1","g1","c1","f1"], b:["b8","g8","c8","f8"]}[col];
+  if (["n","b"].includes(m.piece) && home.includes(m.from)) out.push(`entwickelt ${m.piece === "n" ? "einen Springer" : "einen Läufer"}`);
+  const a0 = new Set(attacksFrom(b0, m.from)), a1 = attacksFrom(b1, m.to);
+  if (!(m.flags.includes("k") || m.flags.includes("q"))){
+    // neue Angriffe auf gegnerische Figuren
+    const hits = a1.filter(s => b1[s] && b1[s].c === opp && b1[s].t !== "k" && !a0.has(s));
+    if (hits.length) out.push("greift " + hits.map(s => `${PACC[b1[s].t]} ${s}`).join(" und ") + " an");
+    // deckt eigene Figuren, aber nur, wenn das zählt: angegriffen oder ein vorgerückter Zentrumsbauer
+    const enemy = new Set(); Object.keys(b1).forEach(s => { if (b1[s].c === opp) attacksFrom(b1, s).forEach(x => enemy.add(x)); });
+    const cov = a1.filter(s => b1[s] && b1[s].c === col && b1[s].t !== "k" && !a0.has(s) && (enemy.has(s) || (b1[s].t === "p" && "de".includes(s[0]) && "45".includes(s[1]))));
+    if (cov.length) out.push("deckt " + cov.slice(0, 2).map(s => `${PACC[b1[s].t]} ${s}`).join(" und "));
+    // Zentrum
+    const center = ["d4","e4","d5","e5"].filter(s => a1.includes(s) || m.to === s);
+    if (center.length && (m.piece === "p" || ["n"].includes(m.piece))) out.push("kämpft ums Zentrum (" + center.join(", ") + ")");
+    // nimmt dem Gegner Felder für seine Figuren (z. B. h3 gegen ...Lg4)
+    const f0 = fenBefore.split(" "); f0[1] = opp; f0[3] = "-";
+    const t = new Chess(); if (t.load(f0.join(" "))){
+      const newCtrl = a1.filter(s => !a0.has(s) && !b1[s]);
+      const denied = t.moves({verbose:true}).filter(x => x.piece !== "p" && newCtrl.includes(x.to) && !x.captured);
+      if (denied.length && m.piece === "p") out.push(`nimmt dem Gegner das Feld ${denied[0].to} (z. B. ${opp === "b" ? "…" : ""}${de(denied[0].san)})`);
+    }
+  }
+  // öffnet Linien für eigene Langschrittler
+  const opened = [];
+  Object.keys(b1).forEach(s => {
+    const p = b1[s]; if (p.c !== col || !["b","r","q"].includes(p.t) || s === m.to) return;
+    const gain = attacksFrom(b1, s).length - attacksFrom(b0, s).length;
+    if (gain >= 2) opened.push(`${p.t === "q" ? "die Dame" : PACC[p.t]} auf ${s}`);
+  });
+  if (opened.length && !(m.flags.includes("k") || m.flags.includes("q"))) out.push("öffnet den Weg für " + opened.slice(0, 2).join(" und "));
+  if (!canCastle(fenBefore, col) && canCastle(after, col) && !(m.flags.includes("k") || m.flags.includes("q"))) out.push("macht die Rochade möglich");
+  if (!out.length && m.piece !== "p"){
+    const wasHit = Object.keys(b0).some(s => b0[s].c === opp && attacksFrom(b0, s).includes(m.from));
+    out.push(wasHit ? `bringt ${PACC[m.piece]} in Sicherheit` : `stellt ${PACC[m.piece]} auf ein besseres, sicheres Feld`);
+  }
+  return out.slice(0, 5);
+}
+function effectsHtml(fenBefore, san, who, comment){
+  const eff = moveEffects(fenBefore, san);
+  return `<div class="eff"><div class="effh"><span class="who ${who === "Du" ? "me" : "op"}">${who}</span> <b class="mono">${esc(moveLabel(fenBefore, san))}</b></div>
+    ${eff.length ? `<ul>${eff.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}
+    ${comment ? `<div class="effc">${comment}</div>` : ""}</div>`;
+}
+// Die letzten beiden Halbzüge eines Zugpfads erklären
+function lastMovesBox(path, mySide, op){
+  if (!path.length) return "";
+  const c = new Chess(), fens = [c.fen()];
+  path.forEach(s => { c.move(s); fens.push(c.fen()); });
+  let h = "";
+  for (let i = Math.max(0, path.length - 2); i < path.length; i++){
+    const mine = (i % 2 === 0) === (mySide === "w");
+    h += effectsHtml(fens[i], path[i], mine ? "Du" : "Gegner", op ? op.comments[path.slice(0, i + 1).join(" ")] || "" : "");
+  }
+  return `<div class="effbox">${h}</div>`;
+}
+
 /* ---------- Übersicht rechts ---------- */
 function renderOpList(){
   const op = OP.op, el = $("oInfo");
@@ -86,7 +178,7 @@ function showLearn(){
   b.set(c.fen(), {orient:op.side, last:lastMove(line, ply), arrows});
   const end = ply >= mv.length;
   $("oPanel").innerHTML = `<div class="ttitle">${esc(line.name)} <span class="muted">· Zug ${Math.ceil(ply / 2) || 0} von ${Math.ceil(mv.length / 2)}</span></div>
-    <div class="ttext">${ply ? `<b class="mono">${esc(moveLabel(fenAt(line, ply - 1).fen(), mv[ply - 1]))}</b> ` : ""}${commentFor(op, path, ply ? isMine(op, ply - 1) : false)}</div>
+    ${ply ? `<div class="effbox">${effectsHtml(fenAt(line, ply - 1).fen(), mv[ply - 1], isMine(op, ply - 1) ? "Du" : "Gegner", commentFor(op, path, isMine(op, ply - 1)))}</div>` : `<div class="ttext">${commentFor(op, path, false)}</div>`}
     ${next ? `<div class="muted">${isMine(op, ply) ? "Dein nächster Zug ist grün markiert. Zieh ihn selbst oder klick auf Weiter." : "Orange: So antwortet der Gegner."}</div>` : `<div class="fb good">Variante zu Ende. Jetzt üben, damit sie sitzt.</div>`}
     <div id="oFb" class="fb"></div>`;
   if (end){ lineStat(line.id).seen = true; saveOpProgress(); renderOpList(); }
@@ -150,10 +242,10 @@ function drillStep(){
   b.set(c.fen(), {orient:op.side, last: ply ? lastMove({moves:OP.path.join(" ")}, ply) : null});
   if (isMine(op, ply)){
     b.enabled = true;
-    drillPanel(ply === 0 ? "Du hast Weiß. Spiel den ersten Zug." : `Gegner: <b class="mono">${esc(moveLabel(fenAt({moves:OP.path.join(" ")}, ply - 1).fen(), OP.path[ply - 1]))}</b>. ${opponentHint(ply)} Dein Zug?`);
+    drillPanel((ply === 0 ? "Du hast Weiß. Spiel den ersten Zug." : `${opponentHint(ply)} <b>Dein Zug?</b>`) + lastMovesBox(OP.path, op.side, op));
   } else {
     b.enabled = false;
-    drillPanel("Der Gegner überlegt …");
+    drillPanel("Der Gegner überlegt …" + lastMovesBox(OP.path, op.side, op));
     // Gegner wählt eine der Varianten, die zu dieser Stellung passen
     const line = pickLine(cands); OP.line = line;
     OP.timer = setTimeout(() => { OP.path.push(mvList(line)[ply]); OP.ply = OP.path.length; drillStep(); }, 500);
@@ -187,7 +279,7 @@ function drillMove(uci, m, after){
     const txt = op.comments[OP.path.join(" ")];
     b.enabled = false;
     const ends = !candidates().length;
-    OP.timer = setTimeout(() => { drillStep(); if (txt && !ends) { const f = $("oFb"); if (f){ f.className = "fb"; f.innerHTML = `<span class="muted">Zu ${esc(de(want))}:</span> ${txt}`; } } }, 450);
+    OP.timer = setTimeout(() => drillStep(), 450);
     return;
   }
   OP.round.err++; OP.missed = true;
@@ -220,7 +312,7 @@ function roundDone(){
   OP.round.done++;
   renderOpList();
   OP.board.enabled = false;
-  const last = OP.path.join(" "), txt = OP.op.comments[last] || "";
+  const last = OP.path.join(" "), txt = lastMovesBox(OP.path, OP.op.side, OP.op);
   $("oPanel").innerHTML = `<div class="ttitle">${OP.missed ? "Variante durchgespielt" : "Fehlerfrei!"} <span class="muted">· ${esc(line.name)}</span></div>
     <div class="ttext">${txt}</div><div id="oFb" class="fb ${OP.missed ? "" : "good"}">${OP.missed ? "Diese Variante kommt bald nochmal dran." : "Sitzt. Weiter mit der nächsten."}</div>
     <div class="muted">Diese Runde: ${OP.round.done} Varianten, ${OP.round.ok} richtige Züge, ${OP.round.err} Fehler</div>`;
@@ -490,7 +582,8 @@ function botRender(){
   b.set(c.fen(), {orient:g.color, last, arrows:g.arrows || []});
   const book = g.left === null ? `<span class="lt good">in der Theorie (${Math.ceil(n / 2)}. Zug)</span>` : `<span class="lt warn">Theorie verlassen bei Zug ${Math.floor(g.left / 2) + 1}</span>`;
   $("oPanel").innerHTML = `<div class="ttitle">Partie gegen ${esc(g.lv.name)} ${book}</div>
-    <div class="ttext">${g.msg || ""}</div>
+    ${g.msg ? `<div class="ttext">${g.msg}</div>` : ""}
+    ${n ? lastMovesBox(g.sans, g.color, OP.op) : ""}
     ${g.warn ? `<div class="fb bad">${g.warn}</div>` : ""}
     ${g.over ? `<div class="fb ${/gewonnen!|Du hast gewonnen/.test(g.over) ? "good" : /Bot hat gewonnen|aufgegeben/.test(g.over) ? "bad" : ""}">${g.over}</div>` : myTurn ? `<div class="muted">Du bist am Zug.</div>` : `<div class="muted">Der Bot überlegt …</div>`}
     <div id="oFb" class="fb"></div>`;
@@ -543,7 +636,7 @@ function botUserMove(uci, m){
         return botRender();
       }
       g.left = path.length; g.msg = `Mit <b class="mono">${esc(de(m.san))}</b> verlässt du die Theorie. Ab hier spielst du nach eigenen Plänen.`;
-    } else g.msg = txt ? `<b class="mono">${esc(de(m.san))}</b>: ${txt}` : "";
+    } else g.msg = "";
   } else g.msg = "";
   if (botCheckEnd()) return botRender();
   botRender();
@@ -570,9 +663,7 @@ async function botTurn(){
   await new Promise(r => { OP.timer = setTimeout(r, fromBook ? 600 : 300 + Math.random() * 500); });
   if (tok !== BOT.tok || BOT.g !== g || !san || OP.mode !== "bot") return;
   g.sans.push(san);
-  const txt = fromBook ? (op.comments[g.sans.join(" ")] || "") : "";
-  const prev = g.msg && g.msg.startsWith("<b class=\"mono\">") && path.length ? g.msg + "<br>" : "";
-  g.msg = fromBook ? `${prev}Bot: <b class="mono">${esc(de(san))}</b>${txt ? " – " + txt : ""}` : (g.left === path.length ? `${prev}Der Bot verlässt die Theorie mit <b class="mono">${esc(de(san))}</b>. Ab hier gilt dein Plan: entwickeln, rochieren, Zentrum halten, auf Drohungen achten.` : "");
+  g.msg = fromBook ? "" : (g.left === path.length ? `Der Bot verlässt die Theorie mit <b class="mono">${esc(de(san))}</b>. Ab hier gilt dein Plan: entwickeln, rochieren, Zentrum halten, auf Drohungen achten.` : "");
   botCheckEnd();
   botRender();
 }
