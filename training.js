@@ -449,7 +449,7 @@ function lessonWrong(after, sq, msg){
 async function lessonMove(uci, m, after){
   const st = TR.st, s = st.s, b = TR.board;
   if (st.done || TR.busy) return;
-  if (s.type === "play") return playMove(uci, m, after);
+  if (s.type === "play") return drillPlayMove(uci, m, after);
   b.set(after, {last:{from:m.from, to:m.to}});
   if (s.lines){
     const cand = s.lines.filter(l => st.path.every((u, k) => l[k] === u) && l[st.path.length] && l[st.path.length].slice(0,4) === uci.slice(0,4));
@@ -486,7 +486,7 @@ function lessonSolution(){
   b.arrows = [{u, c:"#81b64c"}]; b.render();
   feedback("", `Lösung: <b class="mono">${esc(de(sanOf(st.now, u)))}</b>. Zieh ihn selbst.`);
 }
-async function playMove(uci, m, after){
+async function drillPlayMove(uci, m, after){
   const st = TR.st, s = st.s, b = TR.board;
   st.n++; st.now = after;
   b.set(after, {last:{from:m.from, to:m.to}});
