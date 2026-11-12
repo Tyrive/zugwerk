@@ -40,6 +40,7 @@ function renderOpList(){
     <div class="row" style="margin-top:12px">
       <button class="btn primary" data-act="drill" data-set="system">Alle Varianten üben</button>
       <button class="btn" data-act="drill" data-set="ng5">Angriff 4. Sg5 üben</button>
+      <button class="btn" data-act="bot">Gegen Bot spielen</button>
     </div>`;
   $("oLines").innerHTML = op.groups.map(g => `<div class="chap">${esc(g.title)}</div><div class="muted gnote">${esc(g.note)}</div>` +
     g.lines.map(l => {
@@ -70,7 +71,7 @@ function renderMoveList(){
 /* ---------- Lernen ---------- */
 function learn(id, ply){
   const line = allLines(OP.op).find(l => l.id === id); if (!line) return;
-  clearTimeout(OP.timer);
+  clearTimeout(OP.timer); BOT.tok++;
   OP.mode = "learn"; OP.line = line; OP.ply = ply || 0;
   showLearn();
   renderOpList();
@@ -122,7 +123,7 @@ function openInAnalysis(){
 function drill(lines){
   lines = lines.filter(l => l.practice !== false);
   if (!lines.length) return;
-  clearTimeout(OP.timer);
+  clearTimeout(OP.timer); BOT.tok++;
   OP.mode = "drill"; OP.pool = lines; OP.round = {ok:0, err:0, done:0};
   nextRound();
 }
@@ -327,7 +328,7 @@ function renderOpeningGames(){
 function showOpeningGame(i, ply){
   const x = OG.games[i]; if (!x) return;
   clearTimeout(OP.timer);
-  OG.sel = i; OP.mode = "game"; OP.line = x.cmp.line;
+  OG.sel = i; OP.mode = "game"; OP.line = x.cmp.line; BOT.tok++;
   const op = OP.op, d = x.cmp.dev, sans = x.sans;
   const focus = ply != null ? ply : x.cmp.trap ? x.cmp.trap.ply : d ? d.ply : x.cmp.inTheory;
   OG.ply = Math.max(0, Math.min(sans.length, focus));
@@ -410,6 +411,188 @@ function initOpeningGames(){
   $("ogList").onclick = e => { const b = e.target.closest(".game"); if (b) showOpeningGame(+b.dataset.i); };
 }
 
+
+/* ---------- Bot: Eröffnung in einer echten Partie üben ---------- */
+const BOT = {eng:null, ready:null, g:null, tok:0};
+const BOT_LEVELS = [
+  {id:"400",  name:"Anfänger (~400)",       depth:5,  mpv:6, blunder:.20, spread:400},
+  {id:"700",  name:"Einsteiger (~700)",     depth:7,  mpv:5, blunder:.09, spread:220},
+  {id:"1000", name:"Fortgeschritten (~1000)", depth:9, mpv:4, blunder:.04, spread:110},
+  {id:"1400", name:"Vereinsspieler (~1400)", depth:12, mpv:3, blunder:.01, spread:45},
+  {id:"max",  name:"Stockfish (volle Stärke)", depth:18, mpv:1, blunder:0, spread:0}
+];
+function botCfg(){ try { return Object.assign({color:"w", level:"400"}, JSON.parse(localStorage.getItem("zugwerk.botcfg")) || {}); } catch(e){ return {color:"w", level:"400"}; } }
+function saveBotCfg(c){ try { localStorage.setItem("zugwerk.botcfg", JSON.stringify(c)); } catch(e){} }
+function botEngine(){ if (!BOT.ready) BOT.ready = makeEngine().then(e => { BOT.eng = e; }); return BOT.ready; }
+async function botLines(fen, depth, mpv){
+  await botEngine();
+  const e = BOT.eng, lines = {};
+  e.send("setoption name MultiPV value " + mpv);
+  const f = l => {
+    if (!l.startsWith("info") || !l.includes(" pv ") || /bound/.test(l)) return;
+    const k = +(l.match(/ multipv (\d+)/) || [0, 1])[1], s = l.match(/score (cp|mate) (-?\d+)/); if (!s) return;
+    const v = +s[2], cp = s[1] === "mate" ? (v > 0 ? 100000 - v : -100000 - v) : v;
+    lines[k] = {uci:l.match(/ pv (\S+)/)[1], cp};
+  };
+  e.ls.push(f); e.send("position fen " + fen); e.send("go depth " + depth);
+  const bm = await e.until(l => l.startsWith("bestmove"));
+  e.ls = e.ls.filter(x => x !== f);
+  const out = Object.values(lines);
+  return out.length ? out : [{uci:bm.split(" ")[1], cp:0}];
+}
+// Schwächere Stufen wählen nicht immer den besten Zug und patzen gelegentlich
+async function botChoose(fen, lv){
+  const c = new Chess(fen), legal = c.moves({verbose:true});
+  if (Math.random() < lv.blunder){ const m = legal[Math.floor(Math.random() * legal.length)]; return m.from + m.to + (m.promotion || ""); }
+  const lines = await botLines(fen, lv.depth, lv.mpv);
+  const best = Math.max(...lines.map(x => x.cp));
+  const ok = lines.filter(x => x.cp >= best - lv.spread);
+  const w = ok.map(x => 1 / (1 + (best - x.cp) / 60));
+  let r = Math.random() * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < ok.length; i++){ r -= w[i]; if (r <= 0) return ok[i].uci; }
+  return ok[0].uci;
+}
+const bookLines = () => allLines(OP.op).filter(l => l.practice !== false);
+function bookCands(path){ return bookLines().filter(l => { const mv = mvList(l); return path.every((s, i) => mv[i] === s) && mv.length > path.length; }); }
+
+function showBotSetup(){
+  clearTimeout(OP.timer); BOT.tok++;
+  OP.mode = "botsetup"; OP.board.enabled = false;
+  const cfg = botCfg();
+  OP.board.set(START_FEN, {orient:cfg.color});
+  $("oPanel").innerHTML = `<div class="ttitle">Gegen den Bot spielen</div>
+    <div class="ttext">Der Bot spielt die ersten Züge nach der Theorie und wählt dabei zufällig verschiedene Varianten, auch die Fallen. Weichst du ab, sagt er dir, was die Theorie wäre. Danach spielt er in der gewählten Stärke weiter.</div>
+    <div class="botopts">
+      <label>Deine Farbe <select id="botColor"><option value="w"${cfg.color === "w" ? " selected" : ""}>Weiß (dein Repertoire)</option><option value="b"${cfg.color === "b" ? " selected" : ""}>Schwarz (gegen Italienisch)</option></select></label>
+      <label>Stärke <select id="botLevel">${BOT_LEVELS.map(l => `<option value="${l.id}"${cfg.level === l.id ? " selected" : ""}>${l.name}</option>`).join("")}</select></label>
+    </div><div id="oFb" class="fb"></div>`;
+  opControls([{label:"Partie starten", primary:true, fn:() => {
+    const c = {color:$("botColor").value, level:$("botLevel").value}; saveBotCfg(c); startBot(c);
+  }}]);
+  $("oMoves").innerHTML = '<div class="empty">Noch keine Züge.</div>';
+}
+function startBot(cfg){
+  clearTimeout(OP.timer);
+  BOT.tok++;
+  BOT.g = {color:cfg.color, lv:BOT_LEVELS.find(l => l.id === cfg.level) || BOT_LEVELS[0], sans:[], left:null, over:null, msg:"", warn:null};
+  OP.mode = "bot"; OP.board.onMove = botUserMove;
+  botRender();
+  if (cfg.color === "b") botTurn();
+  else { BOT.g.msg = "Du hast Weiß. Spiel deinen ersten Zug."; botRender(); }
+}
+function botGameObj(){ const c = new Chess(); BOT.g.sans.forEach(s => c.move(s)); return c; }
+function botRender(){
+  const g = BOT.g, c = botGameObj(), b = OP.board, n = g.sans.length;
+  let last = null;
+  if (n){ const t = new Chess(); g.sans.slice(0, -1).forEach(s => t.move(s)); const m = t.move(g.sans[n - 1]); last = {from:m.from, to:m.to}; }
+  const myTurn = !g.over && (c.turn() === g.color);
+  b.enabled = myTurn && !g.warn; b.onMove = botUserMove;
+  b.set(c.fen(), {orient:g.color, last, arrows:g.arrows || []});
+  const book = g.left === null ? `<span class="lt good">in der Theorie (${Math.ceil(n / 2)}. Zug)</span>` : `<span class="lt warn">Theorie verlassen bei Zug ${Math.floor(g.left / 2) + 1}</span>`;
+  $("oPanel").innerHTML = `<div class="ttitle">Partie gegen ${esc(g.lv.name)} ${book}</div>
+    <div class="ttext">${g.msg || ""}</div>
+    ${g.warn ? `<div class="fb bad">${g.warn}</div>` : ""}
+    ${g.over ? `<div class="fb ${/gewonnen!|Du hast gewonnen/.test(g.over) ? "good" : /Bot hat gewonnen|aufgegeben/.test(g.over) ? "bad" : ""}">${g.over}</div>` : myTurn ? `<div class="muted">Du bist am Zug.</div>` : `<div class="muted">Der Bot überlegt …</div>`}
+    <div id="oFb" class="fb"></div>`;
+  const btns = [];
+  if (g.warn) btns.push({label:"Zug zurücknehmen", primary:true, fn:() => { g.sans.pop(); g.warn = null; g.arrows = []; g.msg = "Zurückgenommen. Versuch den Theoriezug."; botRender(); }},
+                        {label:"Trotzdem weiterspielen", fn:() => { g.warn = null; g.arrows = []; if (g.left === null) g.left = g.sans.length - 1; botRender(); botTurn(); }});
+  else if (!g.over){
+    btns.push({label:"Tipp", fn:botHint});
+    btns.push({label:"Zug zurück", disabled: n < 2 || !myTurn, fn:() => { g.sans.splice(-2, 2); if (g.left !== null && g.left >= g.sans.length) g.left = null; g.msg = "Zwei Halbzüge zurückgenommen."; g.arrows = []; botRender(); }});
+    btns.push({label:"Aufgeben", fn:() => { g.over = "Du hast aufgegeben."; botRender(); }});
+  }
+  btns.push({label:"Neue Partie", primary:!!g.over, fn:() => startBot({color:g.color, level:g.lv.id})});
+  btns.push({label:"Einstellungen", fn:showBotSetup});
+  if (n) btns.push({label:"Partie analysieren", fn:botToAnalysis});
+  opControls(btns);
+  let h = "";
+  const t = new Chess();
+  g.sans.forEach((s, k) => { t.move(s); if (k % 2 === 0) h += `<span class="mnum">${k / 2 + 1}.</span>`; const cls = g.left === null || k < g.left ? " th" : ""; h += `<span class="omv${cls}">${esc(de(s))}</span>`; });
+  $("oMoves").innerHTML = h || '<div class="empty">Noch keine Züge.</div>';
+}
+function botCheckEnd(){
+  const g = BOT.g, c = botGameObj();
+  if (c.in_checkmate()) g.over = c.turn() === g.color ? "Matt. Der Bot hat gewonnen. Schau dir die Partie im Analysebrett an." : "Matt! Du hast gewonnen.";
+  else if (c.in_stalemate()) g.over = "Patt. Remis.";
+  else if (c.in_threefold_repetition()) g.over = "Dreifache Stellungswiederholung. Remis.";
+  else if (c.insufficient_material()) g.over = "Zu wenig Material. Remis.";
+  else if (c.in_draw()) g.over = "Remis (50-Züge-Regel).";
+  return !!g.over;
+}
+function botUserMove(uci, m){
+  const g = BOT.g; if (!g || g.over || g.warn) return;
+  const path = g.sans.slice(), op = OP.op;
+  const cands = g.left === null ? bookCands(path) : [];
+  g.sans.push(m.san); g.arrows = [];
+  if (cands.length){
+    const inTree = cands.find(l => mvList(l)[path.length] === m.san);
+    const txt = op.comments[[...path, m.san].join(" ")] || "";
+    if (inTree && /Fehler|Ungenau/.test(txt)){
+      g.warn = `Achtung: ${esc(de(m.san))} ist ein bekannter Fehler. ${txt}`;
+      const alt = [...new Set(cands.map(l => mvList(l)[path.length]))].find(s => !/Fehler|Ungenau/.test(op.comments[[...path, s].join(" ")] || ""));
+      if (alt){ const t = new Chess(); path.forEach(s => t.move(s)); const a = t.move(alt); g.arrows = [{u:a.from + a.to, c:"rgba(129,182,76,.9)"}]; g.warn += ` Besser: <b class="mono">${esc(de(alt))}</b> (grün).`; }
+      return botRender();
+    }
+    if (!inTree){
+      if (g.color === op.side){
+        const want = mvList(cands.find(l => l.set === "system") || cands[0])[path.length];
+        const t = new Chess(); path.forEach(s => t.move(s)); const a = t.move(want);
+        g.arrows = [{u:a.from + a.to, c:"rgba(129,182,76,.9)"}];
+        g.warn = `Das ist nicht die Theorie. In deinem Repertoire steht <b class="mono">${esc(de(want))}</b> (grün). ${op.comments[[...path, want].join(" ")] || ""}`;
+        return botRender();
+      }
+      g.left = path.length; g.msg = `Mit <b class="mono">${esc(de(m.san))}</b> verlässt du die Theorie. Ab hier spielst du nach eigenen Plänen.`;
+    } else g.msg = txt ? `<b class="mono">${esc(de(m.san))}</b>: ${txt}` : "";
+  } else g.msg = "";
+  if (botCheckEnd()) return botRender();
+  botRender();
+  botTurn();
+}
+async function botTurn(){
+  const g = BOT.g, tok = ++BOT.tok, op = OP.op;
+  if (!g || g.over) return;
+  botRender();
+  const path = g.sans.slice(), fen = botGameObj().fen();
+  let san = null, fromBook = false;
+  if (g.left === null){
+    const cands = bookCands(path);
+    if (cands.length){ const line = pickLine(cands); san = mvList(line)[path.length]; fromBook = true; }
+    else g.left = path.length;
+  }
+  try {
+    if (!san){
+      const uci = await botChoose(fen, g.lv);
+      const t = new Chess(fen), m = t.move({from:uci.slice(0,2), to:uci.slice(2,4), promotion:uci[4] || "q"});
+      san = m ? m.san : null;
+    }
+  } catch(e){ g.msg = "Stockfish konnte nicht starten."; return botRender(); }
+  await new Promise(r => { OP.timer = setTimeout(r, fromBook ? 600 : 300 + Math.random() * 500); });
+  if (tok !== BOT.tok || BOT.g !== g || !san || OP.mode !== "bot") return;
+  g.sans.push(san);
+  const txt = fromBook ? (op.comments[g.sans.join(" ")] || "") : "";
+  const prev = g.msg && g.msg.startsWith("<b class=\"mono\">") && path.length ? g.msg + "<br>" : "";
+  g.msg = fromBook ? `${prev}Bot: <b class="mono">${esc(de(san))}</b>${txt ? " – " + txt : ""}` : (g.left === path.length ? `${prev}Der Bot verlässt die Theorie mit <b class="mono">${esc(de(san))}</b>. Ab hier gilt dein Plan: entwickeln, rochieren, Zentrum halten, auf Drohungen achten.` : "");
+  botCheckEnd();
+  botRender();
+}
+async function botHint(){
+  const g = BOT.g, fen = botGameObj().fen();
+  const f = $("oFb"); f.className = "fb"; f.textContent = "Stockfish denkt …";
+  try {
+    const r = await search(fen, 14), steps = walk(fen, r.pv, 3);
+    const m = new Chess(fen).move({from:r.best.slice(0,2), to:r.best.slice(2,4), promotion:r.best[4] || "q"});
+    g.arrows = [{u:r.best.slice(0, 4), c:"rgba(72,193,249,.85)"}]; botRender();
+    const f2 = $("oFb"); f2.className = "fb"; f2.innerHTML = `Tipp: <b class="mono">${esc(de(m.san))}</b> (blau). Idee: <b>${lineTxt(steps, 3)}</b>`;
+  } catch(e){ f.textContent = "Stockfish konnte nicht starten."; }
+}
+function botToAnalysis(){
+  const g = BOT.g, c = new Chess(); g.sans.forEach(s => c.move(s));
+  const me = g.color === "w";
+  c.header("Event", "Zugwerk-Bot", "White", me ? "Du" : "Bot " + g.lv.name, "Black", me ? "Bot " + g.lv.name : "Du");
+  try { setGame(parseGame(c.pgn()), !me); S.me = g.color; location.hash = ""; setTimeout(() => runAnalysis(), 50); } catch(e){}
+}
+
 /* ---------- Steuerung ---------- */
 function opControls(btns){
   $("oCtl").innerHTML = btns.map((b, i) => `<button class="btn${b.primary ? " primary" : ""}" data-i="${i}"${b.disabled ? " disabled" : ""}>${b.label}</button>`).join("");
@@ -420,7 +603,7 @@ function initOpenings(){
   if (OP.board){ renderOpList(); return; }
   OP.op = OPENINGS[0];
   OP.board = new TBoard($("oBoard"));
-  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); };
+  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); if (b.dataset.act === "bot") showBotSetup(); };
   $("oLines").onclick = e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const line = allLines(OP.op).find(l => l.id === b.dataset.id);
