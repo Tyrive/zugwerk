@@ -165,6 +165,10 @@ textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:verti
 .varbar span{padding:1px 4px;border-radius:4px}
 .varbar span.cur{background:var(--accent);color:var(--accent-fg)}
 /* Navigation */
+.hdr-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.spellbtn{border:0;background:var(--surface);color:var(--muted);font:700 .82rem var(--font-ui);padding:9px 12px;border-radius:8px;cursor:pointer}
+.spellbtn[aria-pressed="true"]{color:var(--accent)}
+.spellbtn:focus-visible{outline:2px solid var(--accent)}
 .topnav{display:flex;gap:4px;background:var(--surface);border-radius:8px;padding:4px}
 .topnav a{color:var(--muted);text-decoration:none;font-weight:700;padding:6px 14px;border-radius:6px}
 .topnav a[aria-current="page"]{background:var(--surface2);color:var(--fg)}
@@ -279,11 +283,14 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
 <div class="wrap">
   <header>
     <h1>Zug<span>werk</span></h1>
+    <div class="hdr-r">
+    <button class="spellbtn" id="spellBtn" aria-pressed="true" title="Züge in Erklärungen als Wörter oder in Kurzschrift anzeigen">Züge: in Worten</button>
     <nav class="topnav">
       <a href="#" id="navAnalyse" aria-current="page">Analyse</a>
       <a href="#openings" id="navOpenings">Eröffnungen</a>
       <a href="#training" id="navTraining">Training</a>
     </nav>
+    </div>
   </header>
 
   <main id="viewAnalyse">
@@ -1211,12 +1218,13 @@ $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
 $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
 </script>
-<script src="lessons.js?v=20261114b"></script>
-<script src="puzzles.js?v=20261114b"></script>
-<script src="openings.js?v=20261114b"></script>
-<script src="plans.js?v=20261114b"></script>
-<script src="openings-ui.js?v=20261114b"></script>
-<script src="training.js?v=20261114b"></script>
-<script src="sync.js?v=20261114b"></script>
+<script src="lessons.js?v=20261114c"></script>
+<script src="puzzles.js?v=20261114c"></script>
+<script src="openings.js?v=20261114c"></script>
+<script src="plans.js?v=20261114c"></script>
+<script src="openings-ui.js?v=20261114c"></script>
+<script src="training.js?v=20261114c"></script>
+<script src="sync.js?v=20261114c"></script>
+<script src="spell.js?v=20261114c"></script>
 </body>
 </html>

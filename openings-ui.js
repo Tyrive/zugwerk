@@ -172,7 +172,7 @@ function updatePlan(fen, side){
   const next = items.find(x => !x.done && !x.later);
   el.innerHTML = `${italian ? "" : '<div class="muted" style="margin-bottom:6px">Keine typische Italienisch-Stellung. Allgemeine Prinzipien:</div>'}
     ${next ? `<div class="pnext"><div class="muted">Nächster sinnvoller Schritt</div><b>${esc(next.t)}</b><div>${esc(next.why)}</div></div>` : italian ? `<div class="pnext"><b>Aufbau komplett.</b><div>Jetzt geht es ums Mittelspiel: Was will der Gegner, welche deiner Figuren steht am schlechtesten?</div></div>` : ""}
-    <div class="pcheck">${items.map(x => `<div class="pitem${x.done ? " done" : x.later ? " later" : ""}${x === next ? " nxt" : ""}" title="${esc(x.why)}"><span class="pdot">${x.done ? "✓" : ""}</span><span>${esc(x.t)}</span>${x.later && !x.done ? '<span class="lt">später</span>' : ""}</div>`).join("")}</div>
+    <div class="pcheck">${items.map(x => `<div class="pitem${x.done ? " done" : x.later ? " later" : ""}${x === next ? " nxt" : ""}" title="${esc(x.why)}"><span class="pdot">${x.done ? "✓" : ""}</span><span class="seq">${esc(x.t)}</span>${x.later && !x.done ? '<span class="lt">später</span>' : ""}</div>`).join("")}</div>
     <div class="muted ptip">Aber zuerst immer: Was hat der letzte Gegnerzug vor? Eine Drohung geht vor jedem Aufbauzug.</div>`;
 }
 
