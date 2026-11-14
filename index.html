@@ -246,6 +246,28 @@ span.omv{cursor:default}
 .who.op{background:var(--g-black);color:var(--fg)}
 .eff ul{margin:4px 0 0;padding-left:1.2em;font-size:.9rem;display:grid;gap:1px}
 .effc{margin-top:4px;font-size:.88rem;color:var(--muted);line-height:1.45}
+/* Verstehen: Quiz, Plan-Checkliste */
+.qopts{display:grid;gap:6px;margin-top:6px}
+.qopt{background:var(--surface2);border:2px solid transparent;color:var(--fg);text-align:left;font:inherit;padding:9px 12px;border-radius:8px;cursor:pointer;line-height:1.4}
+.qopt:hover:not(:disabled){border-color:var(--line)}
+.qopt.ok{border-color:var(--c-best);background:rgba(129,182,76,.18)}
+.qopt.bad{border-color:var(--c-blunder);background:rgba(250,65,45,.12);opacity:.8}
+.qopt:disabled{cursor:default}
+.pnext{background:var(--surface2);border-left:3px solid var(--accent);border-radius:6px;padding:8px 10px;line-height:1.45;font-size:.92rem}
+.pnext b{display:block;margin:2px 0}
+.pcheck{display:grid;gap:2px;margin-top:10px}
+.pitem{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:.9rem;padding:3px 4px;border-radius:5px}
+.pitem .pdot{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:10px;font-weight:800}
+.pitem.done{color:var(--muted)}
+.pitem.done .pdot{background:var(--accent);border-color:var(--accent);color:#fff}
+.pitem.later{opacity:.55}
+.pitem.nxt{background:var(--surface2);font-weight:700}
+.pitem.nxt .pdot{border-color:var(--accent)}
+.ptip{margin-top:8px;font-size:.82rem}
+.understand{margin:10px 0 6px;padding:8px 10px 6px;background:var(--surface2);border-radius:8px}
+.understand .lrow{padding:2px 0}
+.understand .chap{margin-top:0;color:var(--accent)}
+.understand .chk:not(.on){font-size:10px;color:var(--muted)}
 .botopts label{display:grid;gap:4px;font-size:.85rem;color:var(--muted);font-weight:600}
 .ttitle .lt{margin-left:6px}
 .tips ol{margin:0;padding-left:1.2em;display:grid;gap:6px;font-size:.9rem;line-height:1.45}
@@ -339,6 +361,7 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
       <div class="panel tpanel" id="oPanel"></div>
       <div class="tctl" id="oCtl"></div>
       <div class="panel"><h2>Züge</h2><div class="omoves" id="oMoves"></div></div>
+      <div class="panel"><h2>Dein Plan</h2><div id="oPlan"></div></div>
     </section>
     <section class="col">
       <div class="panel" id="oInfo"></div>
@@ -1188,11 +1211,12 @@ $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
 $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
 </script>
-<script src="lessons.js?v=20261112j"></script>
-<script src="puzzles.js?v=20261112j"></script>
-<script src="openings.js?v=20261112j"></script>
-<script src="openings-ui.js?v=20261112j"></script>
-<script src="training.js?v=20261112j"></script>
-<script src="sync.js?v=20261112j"></script>
+<script src="lessons.js?v=20261114b"></script>
+<script src="puzzles.js?v=20261114b"></script>
+<script src="openings.js?v=20261114b"></script>
+<script src="plans.js?v=20261114b"></script>
+<script src="openings-ui.js?v=20261114b"></script>
+<script src="training.js?v=20261114b"></script>
+<script src="sync.js?v=20261114b"></script>
 </body>
 </html>

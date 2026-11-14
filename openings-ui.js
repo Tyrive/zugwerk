@@ -119,6 +119,127 @@ function lastMovesBox(path, mySide, op){
   return `<div class="effbox">${h}</div>`;
 }
 
+
+/* ---------- Dein Plan: Checkliste für die aktuelle Stellung ---------- */
+function pieceAt(bd, sq, t, c){ const p = bd[sq]; return !!p && p.t === t && p.c === c; }
+function anyOn(bd, sqs, t, c){ return sqs.some(s => pieceAt(bd, s, t, c)); }
+function findAll(bd, t, c){ return Object.keys(bd).filter(s => bd[s].t === t && bd[s].c === c); }
+function planItems(fen, side){
+  const bd = boardOf(fen), W = "w", Bk = "b";
+  const italian = pieceAt(bd, "e4", "p", W) && pieceAt(bd, "e5", "p", Bk);
+  if (!italian) return {italian:false, items:[
+    {t:"Figuren entwickeln", why:"Springer und Läufer raus, jede Figur möglichst nur einmal ziehen.", done: side === W ? !anyOn(bd, ["b1","g1","c1","f1"], "n", W) && !pieceAt(bd, "c1", "b", W) && !pieceAt(bd, "f1", "b", W) : !anyOn(bd, ["b8","g8"], "n", Bk) && !pieceAt(bd, "c8", "b", Bk) && !pieceAt(bd, "f8", "b", Bk)},
+    {t:"Rochieren", why:"Im offenen Zentrum ist der König in der Mitte ein Ziel.", done: side === W ? !pieceAt(bd, "e1", "k", W) : !pieceAt(bd, "e8", "k", Bk)},
+    {t:"Türme auf offene Linien", why:"Eine Linie ohne Bauern ist eine Autobahn für Türme.", done:false},
+    {t:"Schwächen angreifen", why:"Ungedeckte Figuren und isolierte Bauern sind Ziele. Prüfe jeden Zug: Was hängt?", done:false}
+  ]};
+  if (side === W){
+    const lightB = findAll(bd, "b", W).filter(s => (("abcdefgh".indexOf(s[0]) + +s[1]) % 2) === 0); // helle Felder
+    const blackPokes = pieceAt(bd, "a6", "p", Bk) || pieceAt(bd, "b5", "p", Bk) || anyOn(bd, ["a5"], "n", Bk) || pieceAt(bd, "e6", "b", Bk);
+    const items = [
+      {t:"e4 und Sf3", why:"Zentrum besetzen, der Springer greift e5 an.", done: !pieceAt(bd, "g1", "n", W)},
+      {t:"Lc4", why:"Der Läufer zielt auf f7, das nur der König deckt.", done: !pieceAt(bd, "f1", "b", W)},
+      {t:"c3", why:"Bereitet d4 vor und nimmt dem Springer c6 das Feld d4.", done: !pieceAt(bd, "c2", "p", W)},
+      {t:"d3", why:"Deckt e4 ruhig und öffnet den Läufer c1.", done: !pieceAt(bd, "d2", "p", W)},
+      {t:"Rochade", why:"König in Sicherheit, bevor sich das Zentrum öffnet.", done: !pieceAt(bd, "e1", "k", W)},
+      {t:"Te1", why:"Stützt e4 (wichtig für d4) und macht f1 frei für den Springer.", done: ["e1","e2","e3"].some(s => pieceAt(bd, s, "r", W))},
+      {t:"Lb3 (oder Lc2)", why:"Vorbeugend weg, bevor …b5 oder …Sa5 den Läufer jagt.", done: !lightB.includes("c4") && !lightB.includes("f1"), later: !blackPokes},
+      {t:"h3", why:"Verhindert …Lg4, das den Springer f3 an die Dame fesseln würde.", done: pieceAt(bd, "h3", "p", W)},
+      {t:"Sbd2", why:"Der letzte Springer kommt raus, ohne den Bauern c3 zu blockieren.", done: !pieceAt(bd, "b1", "n", W)},
+      {t:"Springer über f1 nach g3 (oder e3)", why:"Von g3 oder e3 zielt er auf f5, direkt vor den schwarzen König.", done: anyOn(bd, ["g3","e3","f5","h5","d5"], "n", W)},
+      {t:"Plan wählen: Le3, d4 oder a4/b4", why:"Den Läufer a7 abtauschen, das Zentrum öffnen oder Raum am Damenflügel nehmen.", done: !pieceAt(bd, "c1", "b", W) || pieceAt(bd, "d4", "p", W) || (pieceAt(bd, "a4", "p", W) && pieceAt(bd, "b4", "p", W))}
+    ];
+    return {italian:true, items};
+  }
+  const items = [
+    {t:"…e5 und …Sc6", why:"Gegen das Zentrum halten und e5 decken.", done: !pieceAt(bd, "b8", "n", Bk)},
+    {t:"Läufer raus (…Lc5 oder …Le7)", why:"…Lc5 zielt auf f2, …Le7 ist solider.", done: !pieceAt(bd, "f8", "b", Bk)},
+    {t:"…Sf6", why:"Entwickelt und greift e4 an.", done: !pieceAt(bd, "g8", "n", Bk)},
+    {t:"…d6", why:"Deckt e5 und öffnet den Läufer c8.", done: !pieceAt(bd, "d7", "p", Bk)},
+    {t:"Rochade", why:"Danach deckt der Turm f8 den Punkt f7.", done: !pieceAt(bd, "e8", "k", Bk)},
+    {t:"…a6", why:"Rückzugsfeld a7 für den Läufer, bevor b4 oder d4 ihn trifft.", done: pieceAt(bd, "a6", "p", Bk) || pieceAt(bd, "a5", "p", Bk) || anyOn(bd, ["a7","b6"], "b", Bk), later: !pieceAt(bd, "c5", "b", Bk) && !anyOn(bd, ["a7","b6"], "b", Bk)},
+    {t:"…h6", why:"Verhindert Lg5 (Fesselung) und Sg5 (Angriff auf f7).", done: pieceAt(bd, "h6", "p", Bk)},
+    {t:"…Te8", why:"Stützt e5 und bereitet …d5 vor.", done: ["e8","e7","e6"].some(s => pieceAt(bd, s, "r", Bk))},
+    {t:"…Le6", why:"Tauscht den starken weißen Läufer ab und bereitet …d5 vor.", done: !pieceAt(bd, "c8", "b", Bk)},
+    {t:"…d5: der Gegenhebel", why:"Öffnet das Zentrum, bevor Weiß mit d4 Raum gewinnt.", done: !pieceAt(bd, "d6", "p", Bk) && !pieceAt(bd, "d7", "p", Bk)}
+  ];
+  return {italian:true, items};
+}
+function updatePlan(fen, side){
+  const el = $("oPlan"); if (!el) return;
+  if (OP.mode === "lesson"){ el.innerHTML = '<div class="empty">Während einer Lektion siehst du die Erklärungen oben.</div>'; return; }
+  const {italian, items} = planItems(fen, side);
+  const next = items.find(x => !x.done && !x.later);
+  el.innerHTML = `${italian ? "" : '<div class="muted" style="margin-bottom:6px">Keine typische Italienisch-Stellung. Allgemeine Prinzipien:</div>'}
+    ${next ? `<div class="pnext"><div class="muted">Nächster sinnvoller Schritt</div><b>${esc(next.t)}</b><div>${esc(next.why)}</div></div>` : italian ? `<div class="pnext"><b>Aufbau komplett.</b><div>Jetzt geht es ums Mittelspiel: Was will der Gegner, welche deiner Figuren steht am schlechtesten?</div></div>` : ""}
+    <div class="pcheck">${items.map(x => `<div class="pitem${x.done ? " done" : x.later ? " later" : ""}${x === next ? " nxt" : ""}" title="${esc(x.why)}"><span class="pdot">${x.done ? "✓" : ""}</span><span>${esc(x.t)}</span>${x.later && !x.done ? '<span class="lt">später</span>' : ""}</div>`).join("")}</div>
+    <div class="muted ptip">Aber zuerst immer: Was hat der letzte Gegnerzug vor? Eine Drohung geht vor jedem Aufbauzug.</div>`;
+}
+
+/* ---------- Warum-Fragen im Übungsmodus ---------- */
+function whyOn(){ try { return localStorage.getItem("zugwerk.whyq") !== "0"; } catch(e){ return true; } }
+function setWhy(on){ try { localStorage.setItem("zugwerk.whyq", on ? "1" : "0"); } catch(e){} }
+function quizDue(key){ const q = OP.op.quiz && OP.op.quiz[key]; if (!q || !whyOn()) return null; const s = OP.pr["q|" + key] || {ok:0, err:0}; return s.ok >= 2 ? null : q; }
+function askWhy(key, kind, cont){
+  const q = OP.op.quiz[key], b = OP.board;
+  b.enabled = false;
+  const opts = q.opts.map((o, k) => Object.assign({k}, o)).sort(() => Math.random() - .5);
+  const st = OP.pr["q|" + key] || (OP.pr["q|" + key] = {ok:0, err:0});
+  let wrong = false;
+  $("oPanel").innerHTML = `<div class="ttitle">${kind === "me" ? "Warum dieser Zug?" : "Was will der Gegner?"} <span class="muted">· Verstehen statt auswendig lernen</span></div>
+    <div class="ttext"><b>${esc(q.q)}</b></div>
+    <div class="qopts">${opts.map(o => `<button class="qopt" data-k="${o.k}">${esc(o.t)}</button>`).join("")}</div>
+    <div id="oFb" class="fb"></div>`;
+  $("oPanel").querySelector(".qopts").onclick = e => {
+    const btn = e.target.closest(".qopt"); if (!btn || btn.disabled) return;
+    const o = q.opts[+btn.dataset.k];
+    if (o.ok){
+      btn.classList.add("ok");
+      if (!wrong) st.ok++;
+      saveOpProgress();
+      $("oPanel").querySelectorAll(".qopt").forEach(x => x.disabled = true);
+      const f = $("oFb"); f.className = "fb good"; f.textContent = wrong ? "Jetzt stimmt es." : "Richtig!";
+      OP.timer = setTimeout(cont, wrong ? 1200 : 700);
+    } else {
+      wrong = true; st.err++; st.ok = 0; saveOpProgress();
+      btn.classList.add("bad"); btn.disabled = true;
+      const f = $("oFb"); f.className = "fb bad"; f.textContent = o.why || "Nicht ganz.";
+    }
+  };
+  opControls([{label:"Überspringen", fn:cont}, {label:"Warum-Fragen aus", fn:() => { setWhy(false); cont(); }}]);
+}
+
+/* ---------- Startansicht des Eröffnungsbereichs ---------- */
+function opHome(){
+  clearTimeout(OP.timer); BOT.tok++;
+  OP.mode = "home"; OP.line = null; OP.board.enabled = false;
+  OP.board.set(fenAt({moves:"e4 e5 Nf3 Nc6 Bc4"}, 5).fen(), {orient:OP.op.side, arrows:[{u:"c4f7", c:"rgba(255,170,0,.8)"}]});
+  const plans = LESSONS.filter(l => l.opening === OP.op.id), nextP = plans.find(l => !PR.lessons[l.id]);
+  $("oPanel").innerHTML = `<div class="ttitle">${esc(OP.op.name)}</div>
+    <div class="ttext"><p>So lernst du die Eröffnung so, dass du sie auch verstehst:</p>
+    <ol><li><b>Verstehen:</b> Die ${plans.length} Plan-Lektionen erklären, was beide Seiten wollen und welche Pläne es nach dem Aufbau gibt.</li>
+    <li><b>Züge lernen:</b> Varianten im Lernmodus mit Erklärung zu jedem Zug.</li>
+    <li><b>Üben:</b> Du spielst, der Gegner variiert. Zwischendurch fragt dich die Seite, <i>warum</i> ein Zug gespielt wird.</li>
+    <li><b>Anwenden:</b> Gegen den Bot spielen. Die Checkliste „Dein Plan“ zeigt dir in jeder Stellung den nächsten sinnvollen Schritt.</li></ol></div>
+    <div id="oFb" class="fb"></div>`;
+  opControls([
+    ...(nextP ? [{label:(plans.indexOf(nextP) === 0 ? "Mit Lektion 1 starten" : "Weiter: " + esc(nextP.title)), primary:true, fn:() => openPlan(nextP.id)}] : []),
+    {label:"Alle Varianten üben", primary:!nextP, fn:() => drill(allLines(OP.op).filter(l => l.set === "system"))},
+    {label:"Gegen Bot spielen", fn:showBotSetup}
+  ]);
+  $("oMoves").innerHTML = '<div class="empty">Wähle rechts eine Variante oder starte eine Lektion.</div>';
+  renderOpList();
+}
+function openPlan(id){
+  clearTimeout(OP.timer); BOT.tok++;
+  OP.mode = "lesson"; OP.line = null;
+  window.zwUseCtx("openings");
+  openLesson(id);
+  $("oMoves").innerHTML = '<div class="empty">Lektion: Die Stellung oben gehört zur Erklärung.</div>';
+  updatePlan(OP.board.fen, "w");
+  renderOpList();
+}
+
 /* ---------- Übersicht rechts ---------- */
 function renderOpList(){
   const op = OP.op, el = $("oInfo");
@@ -127,8 +248,13 @@ function renderOpList(){
     <div class="ophead"><div><div class="ttitle">${esc(op.name)}</div><div class="muted">${op.side === "w" ? "Du spielst Weiß" : "Du spielst Schwarz"} · ${op.eco}</div></div>
       <div class="opcount"><b>${learned}</b>/${lines.length}<div class="muted">gelernt</div></div></div>
     <p class="ttext">${op.summary}</p>
+    ${(() => { const pl = LESSONS.filter(l => l.opening === op.id); if (!pl.length) return ""; const nx = pl.find(l => !PR.lessons[l.id]);
+      return `<div class="understand"><div class="chap">${esc(op.short || op.name)} verstehen</div><div class="muted gnote">Starte hier, wenn du die Züge kennst, aber nicht weißt, warum.</div>` +
+      pl.map((l, i) => `<div class="lrow${OP.mode === "lesson" && TR.ls && TR.ls.les === l ? " cur" : ""}"><span class="chk${PR.lessons[l.id] ? " on" : ""}">${PR.lessons[l.id] ? "\u2713" : i + 1}</span><button class="lname" data-act="plan" data-id="${l.id}">${esc(l.title)}</button>${nx === l ? '<span class="tagnext">Als Nächstes</span>' : ""}<span></span></div>`).join("") + "</div>"; })()}
     <details open><summary>Die Idee</summary><ul class="ttext">${op.idea.map(x => `<li>${x}</li>`).join("")}</ul></details>
+    ${op.thinking ? `<details><summary>So denkst du in jeder Stellung</summary><ol class="ttext">${op.thinking.map(x => `<li>${x}</li>`).join("")}</ol></details>` : ""}
     <details><summary>Typische Fehler</summary><ul class="ttext">${op.mistakes.map(x => `<li>${x}</li>`).join("")}</ul></details>
+
     <div class="row" style="margin-top:12px">
       <button class="btn primary" data-act="drill" data-set="system">Alle Varianten üben</button>
       <button class="btn" data-act="drill" data-set="ng5">Angriff 4. Sg5 üben</button>
@@ -179,7 +305,7 @@ function showLearn(){
   const end = ply >= mv.length;
   $("oPanel").innerHTML = `<div class="ttitle">${esc(line.name)} <span class="muted">· Zug ${Math.ceil(ply / 2) || 0} von ${Math.ceil(mv.length / 2)}</span></div>
     ${ply ? `<div class="effbox">${effectsHtml(fenAt(line, ply - 1).fen(), mv[ply - 1], isMine(op, ply - 1) ? "Du" : "Gegner", commentFor(op, path, isMine(op, ply - 1)))}</div>` : `<div class="ttext">${commentFor(op, path, false)}</div>`}
-    ${next ? `<div class="muted">${isMine(op, ply) ? "Dein nächster Zug ist grün markiert. Zieh ihn selbst oder klick auf Weiter." : "Orange: So antwortet der Gegner."}</div>` : `<div class="fb good">Variante zu Ende. Jetzt üben, damit sie sitzt.</div>`}
+    ${next ? `<div class="muted">${isMine(op, ply) ? "Dein nächster Zug ist grün markiert. Zieh ihn selbst oder klick auf Weiter." : "Orange: So antwortet der Gegner."}</div>` : `<div class="fb good">Variante zu Ende.</div>${line.plan ? `<div class="pnext"><div class="muted">Und jetzt?</div>${esc(line.plan)}</div>` : ""}`}
     <div id="oFb" class="fb"></div>`;
   if (end){ lineStat(line.id).seen = true; saveOpProgress(); renderOpList(); }
   const btns = [
@@ -227,7 +353,7 @@ function pickLine(cands){
   return cands[cands.length - 1];
 }
 function nextRound(){
-  OP.path = []; OP.line = pickLine(OP.pool); OP.ply = 0; OP.missed = false;
+  OP.path = []; OP.line = pickLine(OP.pool); OP.ply = 0; OP.missed = false; OP.asked = new Set();
   OP.board.onMove = drillMove;
   drillStep();
 }
@@ -241,6 +367,8 @@ function drillStep(){
   if (!cands.includes(OP.line)) OP.line = pickLine(cands);
   b.set(c.fen(), {orient:op.side, last: ply ? lastMove({moves:OP.path.join(" ")}, ply) : null});
   if (isMine(op, ply)){
+    const key = OP.path.join(" ");
+    if (ply && !OP.asked.has(key) && quizDue(key)){ OP.asked.add(key); renderMoveListDrill(); return askWhy(key, "opp", drillStep); }
     b.enabled = true;
     drillPanel((ply === 0 ? "Du hast Weiß. Spiel den ersten Zug." : `${opponentHint(ply)} <b>Dein Zug?</b>`) + lastMovesBox(OP.path, op.side, op));
   } else {
@@ -264,7 +392,8 @@ function drillPanel(msg){
   opControls([
     {label:"Lösung zeigen", fn:showDrillSolution},
     {label:"Neue Variante", fn:nextRound},
-    {label:"Zum Lernen", fn:() => learn(OP.line.id, OP.path.length)}
+    {label:"Zum Lernen", fn:() => learn(OP.line.id, OP.path.length)},
+    {label:"Warum-Fragen: " + (whyOn() ? "an" : "aus"), fn:() => { setWhy(!whyOn()); drillStep(); }}
   ]);
 }
 function drillMove(uci, m, after){
@@ -279,7 +408,8 @@ function drillMove(uci, m, after){
     const txt = op.comments[OP.path.join(" ")];
     b.enabled = false;
     const ends = !candidates().length;
-    OP.timer = setTimeout(() => drillStep(), 450);
+    const key = OP.path.join(" ");
+    OP.timer = setTimeout(() => { if (!OP.asked.has(key) && quizDue(key)){ OP.asked.add(key); askWhy(key, "me", drillStep); } else drillStep(); }, 450);
     return;
   }
   OP.round.err++; OP.missed = true;
@@ -315,6 +445,7 @@ function roundDone(){
   const last = OP.path.join(" "), txt = lastMovesBox(OP.path, OP.op.side, OP.op);
   $("oPanel").innerHTML = `<div class="ttitle">${OP.missed ? "Variante durchgespielt" : "Fehlerfrei!"} <span class="muted">· ${esc(line.name)}</span></div>
     <div class="ttext">${txt}</div><div id="oFb" class="fb ${OP.missed ? "" : "good"}">${OP.missed ? "Diese Variante kommt bald nochmal dran." : "Sitzt. Weiter mit der nächsten."}</div>
+    ${line.plan ? `<div class="pnext"><div class="muted">Und jetzt?</div>${esc(line.plan)}</div>` : ""}
     <div class="muted">Diese Runde: ${OP.round.done} Varianten, ${OP.round.ok} richtige Züge, ${OP.round.err} Fehler</div>`;
   opControls([
     {label:"Nächste Variante", primary:true, fn:nextRound},
@@ -694,7 +825,9 @@ function initOpenings(){
   if (OP.board){ renderOpList(); return; }
   OP.op = OPENINGS[0];
   OP.board = new TBoard($("oBoard"));
-  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); if (b.dataset.act === "bot") showBotSetup(); };
+  const origSet = OP.board.set.bind(OP.board);
+  OP.board.set = (fen, o) => { origSet(fen, o); updatePlan(fen, OP.board.orient); };
+  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); if (b.dataset.act === "bot") showBotSetup(); if (b.dataset.act === "plan") openPlan(b.dataset.id); };
   $("oLines").onclick = e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const line = allLines(OP.op).find(l => l.id === b.dataset.id);
@@ -714,7 +847,10 @@ function initOpenings(){
     if (e.key === "ArrowLeft" && OP.ply > 0){ OP.ply--; showLearn(); e.preventDefault(); }
   });
   renderOpList();
-  learn(allLines(OP.op)[0].id, 0);
+  opHome();
 }
 window.zwInitOpenings = initOpenings;
 window.zwOpeningsReload = () => { OP.pr = loadOpProgress(); if (OP.board) renderOpList(); };
+window.zwOpeningsHome = () => opHome();
+window.zwOpeningsDrill = () => drill(allLines(OP.op).filter(l => l.set === "system"));
+window.zwOpeningsBot = () => showBotSetup();

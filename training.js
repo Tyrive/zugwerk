@@ -149,7 +149,7 @@ async function explainWrong(fen, uci, missedMate){
   if (missedMate) return `Damit verpasst du das Matt. Nach ${san} antwortet der Gegner am besten mit <b>${lineTxt(reply, 3)}</b>.`;
   return `${san} ist kein Fehler im Material, lässt aber die Chance liegen. Danach hast du nur noch ${Math.round(w)} % Gewinnchance. Der Gegner antwortet am besten mit <b>${lineTxt(reply, 3)}</b>.`;
 }
-function showExp(pz, html){ if (TR.pz !== pz) return; const e = $("tExp"); if (e && html) e.innerHTML = html; }
+function showExp(pz, html){ if (TR.pz !== pz) return; const e = pq("#tExp"); if (e && html) e.innerHTML = html; }
 
 /* ---------- Brett für das Training ---------- */
 class TBoard{
@@ -245,11 +245,19 @@ class TBoard{
 }
 
 /* ---------- Anzeige: Statusfeld unter dem Brett ---------- */
-function panel(html){ $("tPanel").innerHTML = html; }
-function feedback(kind, html){ const f = $("tFb"); if (!f) return; f.className = "fb " + (kind || ""); f.innerHTML = html; }
+TR.ids = {panel:"tPanel", ctl:"tCtl"}; TR.ctx = "training";
+const TLESSONS = () => LESSONS.filter(l => !l.opening);
+function useCtx(ctx){
+  if (ctx === "openings"){ TR.ctx = "openings"; TR.board = OP.board; TR.ids = {panel:"oPanel", ctl:"oCtl"}; }
+  else { TR.ctx = "training"; TR.board = TR.trainBoard; TR.ids = {panel:"tPanel", ctl:"tCtl"}; }
+}
+window.zwUseCtx = useCtx;
+function pq(sel){ return $(TR.ids.panel).querySelector(sel); }
+function panel(html){ $(TR.ids.panel).innerHTML = html; }
+function feedback(kind, html){ const f = pq("#tFb"); if (!f) return; f.className = "fb " + (kind || ""); f.innerHTML = html; }
 function controls(btns){
-  $("tCtl").innerHTML = btns.map((b, i) => `<button class="btn${b.primary ? " primary" : ""}" data-i="${i}"${b.disabled ? " disabled" : ""}>${b.label}</button>`).join("");
-  $("tCtl").onclick = e => { const x = e.target.closest("button"); if (x && !x.disabled) btns[+x.dataset.i].fn(); };
+  $(TR.ids.ctl).innerHTML = btns.map((b, i) => `<button class="btn${b.primary ? " primary" : ""}" data-i="${i}"${b.disabled ? " disabled" : ""}>${b.label}</button>`).join("");
+  $(TR.ids.ctl).onclick = e => { const x = e.target.closest("button"); if (x && !x.disabled) btns[+x.dataset.i].fn(); };
 }
 const sideTxt = fen => fen.split(" ")[1] === "w" ? "Weiß" : "Schwarz";
 
@@ -354,7 +362,7 @@ function puzzleSolved(alt, sq){
     {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
     {label:"Lösung ansehen", fn:puzzleSolution},
     {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
-    {label:"Übersicht", fn:() => showHomePanel()}
+    {label:"Übersicht", fn:() => lessonHome()}
   ]);
 }
 async function explainDone(pz){
@@ -397,7 +405,7 @@ function puzzleSolution(){
   controls([
     {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
     {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
-    {label:"Übersicht", fn:() => showHomePanel()}
+    {label:"Übersicht", fn:() => lessonHome()}
   ]);
 }
 
@@ -412,14 +420,29 @@ function showStep(){
   const side = s.fen.split(" ")[1];
   TR.st = {s, path:[], now:s.fen, done:s.type === "info", wrong:0, n:0};
   b.onMove = lessonMove;
-  b.enabled = s.type !== "info";
-  b.set(s.fen, {orient: s.orient || (s.type === "info" ? "w" : side), arrows:(s.arrows || []).map(u => ({u, c:"#ffaa00"}))});
+  b.enabled = s.type !== "info" && s.type !== "quiz";
+  b.set(s.fen, {orient: s.orient || (s.type === "info" || s.type === "quiz" ? "w" : side), arrows:(s.arrows || []).map(u => ({u, c:"#ffaa00"}))});
   const intro = i === 0 && les.intro ? `<p class="muted">${les.intro}</p>` : "";
   panel(`<div class="ttitle">${esc(les.title)} <span class="muted">· Schritt ${i + 1} von ${les.steps.length}</span></div>
     ${intro}<div class="ttext">${s.text}</div>
     ${s.type === "play" ? `<div class="muted" id="tCount">Züge: 0 / ${s.max}</div>` : ""}
+    ${s.type === "quiz" ? `<div class="qopts">${shuffledOpts(s).map(o => `<button class="qopt" data-k="${o.k}">${esc(o.t)}</button>`).join("")}</div>` : ""}
     <div id="tFb" class="fb"></div>`);
+  if (s.type === "quiz") $(TR.ids.panel).querySelector(".qopts").onclick = e => { const b = e.target.closest(".qopt"); if (b && !TR.st.done) quizAnswer(b); };
   lessonControls();
+}
+// Antworten mischen, damit die richtige nicht immer oben steht (stabil pro Schritt)
+function shuffledOpts(s){
+  const o = s.opts.map((x, k) => Object.assign({k}, x));
+  let seed = s.text.length;
+  for (let i = o.length - 1; i > 0; i--){ seed = (seed * 9301 + 49297) % 233280; const j = Math.floor(seed / 233280 * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+  return o;
+}
+function quizAnswer(btn){
+  const st = TR.st, o = st.s.opts[+btn.dataset.k];
+  if (o.ok){ btn.classList.add("ok"); return stepDone(); }
+  st.wrong++; btn.classList.add("bad"); btn.disabled = true;
+  feedback("bad", o.why || "Nicht ganz.");
 }
 function lessonControls(){
   const {les, i} = TR.ls, st = TR.st, s = st.s, last = i === les.steps.length - 1;
@@ -431,9 +454,10 @@ function lessonControls(){
   btns.push(last
     ? {label:"Lektion abschließen", primary:true, disabled:!st.done, fn:finishLesson}
     : {label:"Weiter", primary:true, disabled:!st.done, fn:() => { TR.ls.i++; showStep(); }});
-  btns.push({label:"Übersicht", fn:() => showHomePanel()});
+  btns.push({label:"Übersicht", fn:() => lessonHome()});
   controls(btns);
 }
+function lessonHome(){ if (TR.ctx === "openings" && window.zwOpeningsHome) window.zwOpeningsHome(); else showHomePanel(); }
 function stepDone(){
   const st = TR.st; st.done = true; TR.board.enabled = false;
   feedback("good", st.s.done || "Richtig!");
@@ -490,7 +514,7 @@ async function drillPlayMove(uci, m, after){
   const st = TR.st, s = st.s, b = TR.board;
   st.n++; st.now = after;
   b.set(after, {last:{from:m.from, to:m.to}});
-  const cnt = $("tCount"); if (cnt) cnt.textContent = `Züge: ${st.n} / ${s.max}`;
+  const cnt = pq("#tCount"); if (cnt) cnt.textContent = `Züge: ${st.n} / ${s.max}`;
   const c = new Chess(after);
   if (c.in_checkmate()) return s.goal === "mate" ? stepDone() : playFail("Matt gesetzt, aber das Ziel war die Umwandlung. Trotzdem stark!");
   if (c.game_over()) return playFail(c.in_stalemate() ? "Patt! Der König hat keinen Zug mehr, steht aber nicht im Schach. Das ist Remis." : "Remis.");
@@ -510,25 +534,37 @@ async function drillPlayMove(uci, m, after){
 function playFail(msg){
   TR.board.enabled = false;
   feedback("bad", msg);
-  controls([{label:"Neu starten", primary:true, fn:showStep}, {label:"Übersicht", fn:() => showHomePanel()}]);
+  controls([{label:"Neu starten", primary:true, fn:showStep}, {label:"Übersicht", fn:() => lessonHome()}]);
 }
 function finishLesson(){
   const les = TR.ls.les;
   const first = !PR.lessons[les.id];
   PR.lessons[les.id] = true; saveProgress(); bump("l");
-  const next = LESSONS.find(l => !PR.lessons[l.id]);
+  if (les.opening){
+    const nextP = LESSONS.find(l => l.opening === les.opening && !PR.lessons[l.id]);
+    panel(`<div class="ttitle">Lektion abgeschlossen</div><div class="ttext">${first ? "Verstanden: " : "Wiederholt: "}<b>${esc(les.title)}</b>. Am besten setzt du das jetzt direkt um: Spiel die Varianten im Übungsmodus und achte auf die Warum-Fragen.</div><div id="tFb" class="fb"></div>`);
+    controls([
+      ...(nextP ? [{label:"Nächste Plan-Lektion", primary:true, fn:() => openLesson(nextP.id)}] : []),
+      {label:"Varianten üben", primary:!nextP, fn:() => window.zwOpeningsDrill && window.zwOpeningsDrill()},
+      {label:"Gegen Bot spielen", fn:() => window.zwOpeningsBot && window.zwOpeningsBot()},
+      {label:"Übersicht", fn:() => lessonHome()}
+    ]);
+    if (window.zwOpeningsReload) window.zwOpeningsReload();
+    return;
+  }
+  const next = TLESSONS().find(l => !PR.lessons[l.id]);
   panel(`<div class="ttitle">Lektion abgeschlossen</div><div class="ttext">${first ? "Neu gelernt: " : "Wiederholt: "}<b>${esc(les.title)}</b>. Festige es jetzt mit ein paar Rätseln.</div><div id="tFb" class="fb"></div>`);
   controls([
     {label:"Rätsel üben", primary:true, fn:() => startPuzzle(les.chapter === "Mattbilder" ? "mate" : "mix")},
     ...(next ? [{label:"Nächste Lektion", fn:() => openLesson(next.id)}] : []),
-    {label:"Übersicht", fn:() => showHomePanel()}
+    {label:"Übersicht", fn:() => lessonHome()}
   ]);
 }
 
 /* ---------- Übersicht ---------- */
 function showHomePanel(note){
   TR.mode = null; TR.board.enabled = false; TR.board.set(START_FEN, {orient:"w"});
-  const next = LESSONS.find(l => !PR.lessons[l.id]);
+  const next = TLESSONS().find(l => !PR.lessons[l.id]);
   const mist = loadMistakes().length;
   panel(`<div class="ttitle">Training</div>
     <div class="ttext">${note ? `<p class="fb bad">${note}</p>` : ""}<p>Täglich 15 Minuten reichen: <b>10 Rätsel</b>, <b>eine Lektion</b> und deine <b>eigenen Fehler</b> aus analysierten Partien wiederholen.</p></div>`);
@@ -557,15 +593,16 @@ function renderHome(){
   const counts = {}; MODES.forEach(m => counts[m.id] = (window.PUZZLES || []).filter(m.f).length);
   $("tModes").innerHTML = MODES.map(m => `<button class="chipbtn" data-mode="${m.id}">${m.label} <small>${counts[m.id]}</small></button>`).join("") +
     `<button class="chipbtn${mist ? "" : " off"}" data-mode="mistakes">Eigene Fehler <small>${mist}</small></button>`;
-  const chapters = [...new Set(LESSONS.map(l => l.chapter))];
-  const next = LESSONS.find(l => !PR.lessons[l.id]);
+  const chapters = [...new Set(TLESSONS().map(l => l.chapter))];
+  const next = TLESSONS().find(l => !PR.lessons[l.id]);
   $("tLessons").innerHTML = chapters.map(ch => `<div class="chap">${ch}</div>` +
-    LESSONS.filter(l => l.chapter === ch).map(l => `<button class="lesson${PR.lessons[l.id] ? " done" : ""}${next === l ? " next" : ""}" data-id="${l.id}">
+    TLESSONS().filter(l => l.chapter === ch).map(l => `<button class="lesson${PR.lessons[l.id] ? " done" : ""}${next === l ? " next" : ""}" data-id="${l.id}">
       <span class="chk">${PR.lessons[l.id] ? "✓" : ""}</span><span>${esc(l.title)}</span>${next === l ? '<span class="tagnext">Als Nächstes</span>' : ""}</button>`).join("")).join("");
 }
 function initTraining(){
-  if (TR.board) { renderHome(); return; }
-  TR.board = new TBoard($("tBoard"));
+  if (TR.trainBoard) { useCtx("training"); renderHome(); return; }
+  TR.trainBoard = TR.board = new TBoard($("tBoard"));
+  useCtx("training");
   $("tModes").onclick = e => { const b = e.target.closest(".chipbtn"); if (b) startPuzzle(b.dataset.mode); };
   $("tLessons").onclick = e => { const b = e.target.closest(".lesson"); if (b) openLesson(b.dataset.id); };
   renderHome(); showHomePanel();

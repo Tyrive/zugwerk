@@ -255,3 +255,113 @@ window.OPENINGS = [
   }
 }
 ];
+
+/* ---------- Verstehen: Warum-Fragen, Pläne pro Variante, Denk-Routine ---------- */
+(function(){
+  const op = window.OPENINGS.find(o => o.id === "italienisch");
+  const S3 = "e4 e5 Nf3 Nc6 Bc4", PIA = S3 + " Bc5 c3 Nf6 d3 d6 O-O O-O Re1 a6 Bb3 Ba7 h3 h6 Nbd2 Re8 Nf1";
+  const pia = n => PIA.split(" ").slice(0, n).join(" ");
+  op.short = "Italienisch";
+  op.thinking = [
+    "<b>1. Was macht der letzte Zug des Gegners?</b> Greift er etwas an, droht er etwas, bereitet er …d5, …Lg4 oder …Sa5 vor?",
+    "<b>2. Kann ich etwas gewinnen?</b> Hängt eine Figur, steht der König in der Mitte, ist f7 nur vom König gedeckt?",
+    "<b>3. Was fehlt in meinem Aufbau?</b> Schau auf die Checkliste „Dein Plan“: c3, d3, Rochade, Te1, Lb3, h3, Sbd2–f1–g3.",
+    "<b>4. Ist mein Hebel bereit?</b> Steht alles, entscheide dich: Le3 (Läufer tauschen), d4 (Zentrum) oder a4/b4 (Damenflügel)."
+  ];
+  // Warum-Fragen: nach deinem Zug („Warum?“) bzw. nach dem Gegnerzug („Was will er?“)
+  const Q = (q, ok, ...wrong) => ({q, opts:[{t:ok, ok:true}, ...wrong.map(w => ({t:w[0], why:w[1]}))]});
+  op.quiz = {
+    [S3]: Q("Warum 3. Lc4?", "Der Läufer zielt auf f7, das nur der König deckt",
+      ["Er greift den Springer c6 an", "Das macht Lb5 (Spanisch). Lc4 zielt auf f7."],
+      ["Er schützt den Bauern e4", "Der Läufer auf c4 deckt e4 nicht."]),
+    [pia(6)]: Q("Was will Schwarz mit 3…Lc5?", "Sein Läufer zielt auf f2, genau wie deiner auf f7",
+      ["Er greift e4 an", "Der Läufer c5 hat mit e4 nichts zu tun."],
+      ["Er deckt den Bauern e5", "e5 deckt der Springer c6. Der Läufer zielt auf f2."]),
+    [pia(7)]: Q("Warum 4. c3?", "Bereitet d4 vor und nimmt dem Springer c6 das Feld d4",
+      ["Greift den Läufer c5 an", "Das würde b4 tun. c3 greift nichts an."],
+      ["Deckt den Läufer c4", "c3 deckt c4 nicht."]),
+    [pia(8)]: Q("Was will Schwarz mit 4…Sf6?", "Entwickeln und den Bauern e4 angreifen",
+      ["Den Läufer c4 angreifen", "Der Springer f6 erreicht c4 nicht."],
+      ["Sofort Matt auf f2 vorbereiten", "Für einen Angriff auf f2 fehlen Schwarz noch Figuren."]),
+    [pia(9)]: Q("Warum 5. d3 und nicht 5. d4?", "d3 deckt e4 ruhig, d4 kommt erst nach dem Aufbau",
+      ["d3 greift den Springer f6 an", "d3 greift nichts an, es ist ein Deckungszug."],
+      ["d4 ist ein Fehler, der eine Figur verliert", "d4 verliert nichts, ist aber scharf und theoretisch. Der ruhige Plan ist d3."]),
+    [pia(11)]: Q("Warum rochierst du jetzt?", "König in Sicherheit, bevor das Zentrum aufgeht, und der Turm kommt ins Spiel",
+      ["Um e5 anzugreifen", "Die Rochade greift nichts an."],
+      ["Um …Lg4 zu verhindern", "Das macht h3, nicht die Rochade."]),
+    [pia(13)]: Q("Warum 7. Te1?", "Der Turm stützt e4 (wichtig für d4) und macht f1 für den Springer frei",
+      ["Er bereitet Txe5 vor", "e5 ist doppelt gedeckt, Txe5 ist kein Plan."],
+      ["Er schützt den König vor Matt", "Dein König ist nicht in Gefahr. Es geht um e4 und das Feld f1."]),
+    [pia(14)]: Q("Was will Schwarz mit 7…a6?", "Ein Rückzugsfeld für den Läufer (a7) und …b5/…Sa5 gegen deinen Läufer vorbereiten",
+      ["Den Turm über a7 ins Spiel bringen", "Möglich, aber selten. Es geht um den Läufer c5 und deinen Läufer c4."],
+      ["Luft für den König", "Luft macht man mit den Bauern vor dem König (h6), nicht mit a6."]),
+    [pia(15)]: Q("Warum 8. Lb3?", "Der Läufer geht vorbeugend weg, bevor …b5 oder …Sa5 kommt, und zielt weiter auf f7",
+      ["Er greift f7 neu an", "Auch auf c4 zielte er auf f7. Neu ist nur die Sicherheit."],
+      ["Er deckt den Bauern d4", "Auf d4 steht kein Bauer."]),
+    [pia(17)]: Q("Warum 9. h3?", "Verhindert …Lg4, das den Springer f3 fesseln würde",
+      ["Bereitet g4 und Königsangriff vor", "g4 schwächt deinen König. h3 ist vorbeugend."],
+      ["Luft gegen Grundreihenmatt", "Ein Nebeneffekt, nicht der Hauptgrund. Es geht um …Lg4."]),
+    [pia(18)]: Q("Was will Schwarz mit 9…h6?", "Dasselbe wie du: Lg5 und Sg5 verhindern",
+      ["Einen Angriff mit …g5 vorbereiten", "…g5 würde den eigenen König schwächen. …h6 ist vorbeugend."],
+      ["Den Springer f6 decken", "…h6 deckt f6 nicht, es nimmt deinen Figuren das Feld g5."]),
+    [pia(19)]: Q("Warum 10. Sbd2?", "Der letzte Springer kommt raus, ohne c3 zu blockieren, und läuft weiter nach f1 und g3",
+      ["Er greift e5 an", "Von d2 greift der Springer e5 nicht an."],
+      ["Er deckt den Läufer b3", "Der Läufer b3 ist nicht angegriffen. Der Springer will nach f1 und g3."]),
+    [pia(21)]: Q("Warum 11. Sf1?", "Der Springer ist unterwegs nach g3 (oder e3), von dort zielt er auf f5",
+      ["Er verteidigt f2", "f2 ist nicht in Gefahr. Der Springer ist auf dem Weg zum Königsflügel."],
+      ["Er greift e5 an", "Von f1 greift der Springer nichts an. Er läuft weiter."]),
+    [S3 + " Be7"]: Q("Was will Schwarz mit 3…Le7?", "Solide stehen und f7 vor Angriffen schützen, ist aber passiv",
+      ["f2 angreifen", "Von e7 zielt der Läufer nicht auf f2."],
+      ["Sofort …d5 spielen", "…d5 ist ohne Vorbereitung nicht möglich."]),
+    [S3 + " Be7 d4"]: Q("Warum gegen 3…Le7 sofort 4. d4?", "Gegen passive Züge nimmst du sofort Raum im Zentrum",
+      ["Um den Läufer e7 anzugreifen", "d4 greift e5 an, nicht den Läufer."],
+      ["Weil d3 hier verliert", "d3 verliert nicht, ist aber zu zahm gegen einen passiven Aufbau."]),
+    [S3 + " d6 Nc3 Bg4"]: Q("Was will Schwarz mit …Lg4?", "Den Springer f3 an die Dame fesseln",
+      ["Den Läufer c4 angreifen", "Der Läufer g4 zielt auf f3 und deine Dame."],
+      ["Den Bauern h3 verhindern", "Er verhindert h3 nicht, im Gegenteil: h3 fragt den Läufer."]),
+    [S3 + " Nd4"]: Q("Was will Schwarz mit 3…Sd4?", "Eine Falle: Er hofft auf Sxe5, dann folgt …Dg5 mit Doppelangriff",
+      ["Den Bauern e4 erobern", "Der Springer d4 greift e4 nicht an."],
+      ["Den Läufer c4 abtauschen", "Dafür müsste der Springer nach a5 oder b6. Hier lauert die Dg5-Falle."]),
+    [S3 + " Nf6"]: Q("Was will Schwarz mit 3…Sf6 (Zweispringerspiel)?", "e4 angreifen, statt den Läufer zu entwickeln",
+      ["f2 angreifen", "Das wäre …Lc5. …Sf6 greift e4 an."],
+      ["Den Springer f3 abtauschen", "Der Springer f6 greift f3 nicht an."]),
+    ["e4 e5 Nf3 Nf6"]: Q("Was will Schwarz mit 2…Sf6 (Russisch)?", "Gegenangriff auf e4, statt e5 zu decken",
+      ["e5 decken", "e5 bleibt ungedeckt. Schwarz greift dafür e4 an."],
+      ["Den Läufer f1 blockieren", "Der Springer f6 hat damit nichts zu tun."]),
+    ["e4 e5 Nf3 d6"]: Q("Was will Schwarz mit 2…d6 (Philidor)?", "e5 mit einem Bauern decken, sperrt dabei aber den Läufer f8 ein",
+      ["e4 angreifen", "…d6 greift e4 nicht an."],
+      ["Einen schnellen Angriff vorbereiten", "Philidor ist eine passive, solide Verteidigung."]),
+    ["e4 e5 Nf3 f6"]: Q("Was ist das Problem an 2…f6?", "Es deckt e5, öffnet aber die Diagonale h5–e8 zum König",
+      ["Es stellt den Bauern e5 ein", "Es deckt e5 sogar. Das Problem ist der König."],
+      ["Es blockiert den Springer g8", "Der Springer kann über e7 und h6 raus. Das Hauptproblem ist der König."])
+  };
+  // Plan pro Variante: was nach dem letzten Theoriezug zu tun ist
+  const P = {
+    "it-pianissimo":"Plan ab hier: Sg3 und Le3, um den Läufer a7 abzutauschen. Danach springt ein Springer nach f5. Wenn Schwarz ungenau ist (z. B. …a5), kommt d4.",
+    "it-d6":"Dieselbe Stellung wie im Pianissimo. Weiter mit Sbd2–f1–g3 und Le3. Merke: Die Zugfolge ist egal, der Aufbau ist immer gleich.",
+    "it-qe7":"Du hast mit d4 schon Raum. Plan: Sbd2–f1–g3, Le3, und die Spannung im Zentrum halten. Tauscht Schwarz auf d4, schlägst du mit dem c-Bauern zurück.",
+    "it-2s":"Stellung wie im Pianissimo. Plan: Sbd2–f1–g3, Le3. Der Läufer a7 ist die gefährlichste schwarze Figur.",
+    "it-2s-be7":"Schwarz steht passiv. Plan: Lb3, h3, Sbd2–f1–g3, dann d4. Gegen den Läufer e7 lohnt sich d4 früher als gegen Lc5.",
+    "it-2s-d5":"Das Zentrum ist offen. Plan: Druck auf e5 mit Te1, Sbd2–e4 oder Sc3. Achte auf …Sf4 gegen deinen Königsflügel.",
+    "it-ung":"Du hast viel Raum. Plan: Rochade, h3, dann am Damenflügel mit b4 und c5 angreifen. Schwarz versucht …f5.",
+    "it-ung-x":"Offenes Zentrum, du hast mehr Raum. Plan: Te1, Lf4, später f4. Halte den Springer d4 zentral.",
+    "it-d6-bg4":"Du hast das Läuferpaar. Plan: Dd1 oder De2, Le3, später f4. Öffne das Spiel, Läufer lieben offene Stellungen.",
+    "it-d6-nf6":"Du hast einen Bauern mehr. Plan: Rochade, d3, und den Springer g5 rechtzeitig zurückholen. Schwarz hat Entwicklungsvorsprung.",
+    "it-d6-be6":"Du hast einen Bauern mehr, und der schwarze König kann nicht rochieren. Plan: Rochade, d3, dann die Linien gegen den König öffnen.",
+    "it-russisch":"Ruhige, symmetrische Stellung. Plan: Rochade, Te1, c4, um den Springer e4 zu untergraben.",
+    "it-philidor":"Du hast mehr Raum. Plan: Te1, Lf4 oder f4. Schwarz steht eng, vermeide unnötige Abtausche.",
+    "it-philidor-nf6":"Du hast mehr Raum. Plan: Te1, a4, h3. Schwarz wartet auf …exd4 oder …c6 mit …b5.",
+    "it-damiano-qe7":"Die schwarze Dame steht zu früh draußen. Plan: Rochade, Te1 mit Tempo, Sc3 mit Tempo gegen die Dame.",
+    "it-legal":"Matt. Das Muster: Eine Fesselung gegen die Dame ist nur scheinbar.",
+    "it-legal-b":"Du hast einen Bauern mehr und das Zentrum. Plan: Rochade, d3, Le3.",
+    "it-russisch-falle":"Du gewinnst die Dame. Bring danach einfach deine Figuren raus.",
+    "it-russisch-falle-b":"Du hast einen Bauern mehr. Plan: Damentausch ist dir recht, danach Figuren entwickeln.",
+    "it-damiano":"Der schwarze König steht in der Mitte. Plan: Schach geben, Figuren mit Tempo entwickeln, d4.",
+    "it-bs":"Schwarz hat Zeit verloren und einen Doppelbauern. Plan: d3, Druck auf d4 mit c3, normale Entwicklung.",
+    "it-ng5-fried":"Du hast eine Figur weniger, aber einen starken Angriff. Plan: d4, Rochade, alle Figuren gegen den König in der Mitte.",
+    "it-ng5-main":"Du hast einen Bauern mehr, Schwarz hat Initiative. Plan: Rochade, f4, den Springer e5 stützen.",
+    "it-ng5-h6":"Du hast eine Qualität mehr. Der Springer h8 ist eingesperrt, hol ihn mit Sf7 oder Sg6 raus, wenn möglich.",
+    "it-ng5-traxler":"Du hast einen Bauern mehr, und Schwarz kann nicht rochieren. Plan: Rochade, d3, Sc3."
+  };
+  op.groups.forEach(g => g.lines.forEach(l => { if (P[l.id]) l.plan = P[l.id]; }));
+})();
