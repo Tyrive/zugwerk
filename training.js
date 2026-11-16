@@ -203,9 +203,17 @@ class TBoard{
     if (this.draw) h += this.draw.svg(this.fen);
     this.el.innerHTML = h;
   }
-  tryMove(from, to){
+  tryMove(from, to, promo){
     if (!this.enabled) return false;
-    const c = new Chess(this.fen), m = c.move({from, to, promotion:"q"});
+    const c = new Chess(this.fen), cand = c.moves({square:from, verbose:true}).filter(x => x.to === to);
+    if (!cand.length) return false;
+    if (cand[0].promotion && !promo){
+      // Erst die Figur wählen lassen; der Zug wird danach mit der Wahl ausgeführt
+      const fen = this.fen; this.sel = null; this.render();
+      promoPicker(this.el, this.xy(to), cand[0].color, t => { if (t && this.fen === fen) this.tryMove(from, to, t); else this.render(); });
+      return true;
+    }
+    const m = c.move({from, to, promotion:promo || "q"});
     if (!m) return false;
     this.sel = null; this.hintSq = null;
     if (this.onMove) this.onMove(m.from + m.to + (m.promotion || ""), m, c.fen());

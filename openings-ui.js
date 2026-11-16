@@ -258,7 +258,7 @@ function openPlan(id){
   window.zwUseCtx("openings");
   openLesson(id);
   $("oMoves").innerHTML = '<div class="empty">Lektion: Die Stellung oben gehört zur Erklärung.</div>';
-  updatePlan(OP.board.fen, "w");
+  updatePlan(OP.board.fen, OP.op.side);
   renderOpList();
 }
 

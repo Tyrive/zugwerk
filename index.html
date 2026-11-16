@@ -288,6 +288,12 @@ span.omv{cursor:default}
 .botopts label{display:grid;gap:4px;font-size:.85rem;color:var(--muted);font-weight:600}
 .ttitle .lt{margin-left:6px}
 .tips ol{margin:0;padding-left:1.2em;display:grid;gap:6px;font-size:.9rem;line-height:1.45}
+/* Umwandlung: Auswahl der Figur am Zielfeld */
+.promoveil{position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:8}
+.promo{position:absolute;width:12.5%;height:50%;z-index:9;display:grid;grid-template-rows:repeat(4,minmax(0,1fr));background:#f4f4f2;border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.55);overflow:hidden}
+.promo button{border:0;background:none;padding:6%;cursor:pointer;display:block;min-width:0;min-height:0}
+.promo button:hover,.promo button:focus-visible{background:#d6e7c4;outline:none}
+.promo .pc{width:100%;height:100%}
 /* Training: Tagestraining, Themen, Sturm, Felder finden */
 .sess{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:600}
 .sess b{color:var(--accent);font-weight:800}
@@ -475,7 +481,7 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     </section>
   </main>
 
-  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Figuren: cburnett (Colin M.L. Burnett, GPL). Pfeiltasten ← → zum Navigieren, ↑ ↓ springen zum vorigen oder nächsten Fehler, F dreht das Brett. Fertige Analysen der letzten 12 Partien bleiben in diesem Browser gespeichert. Figuren ziehen oder anklicken, um eigene Varianten zu testen (Umwandlung immer in eine Dame). Rechtsklick ziehen zeichnet Pfeile, Rechtsklick auf ein Feld markiert es (mit Shift grün, Strg rot, Alt blau), Linksklick löscht alles.</footer>
+  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Figuren: cburnett (Colin M.L. Burnett, GPL). Pfeiltasten ← → zum Navigieren, ↑ ↓ springen zum vorigen oder nächsten Fehler, F dreht das Brett. Fertige Analysen der letzten 12 Partien bleiben in diesem Browser gespeichert. Figuren ziehen oder anklicken, um eigene Varianten zu testen. Bei der Umwandlung wählst du die Figur am Zielfeld aus. Rechtsklick ziehen zeichnet Pfeile, Rechtsklick auf ein Feld markiert es (mit Shift grün, Strg rot, Alt blau), Linksklick löscht alles.</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -964,6 +970,27 @@ class Draw{
   }
 }
 var DRAW = null;
+/* Umwandlung: Auswahl Dame, Springer, Turm, Läufer direkt am Zielfeld (wie bei chess.com). Klick daneben bricht ab. */
+const PROMO_NAMES = {q:"Dame", n:"Springer", r:"Turm", b:"Läufer"};
+function promoPicker(boardEl, p, color, cb){
+  boardEl.querySelectorAll(".promo,.promoveil").forEach(x => x.remove());
+  const down = p.y >= 4, order = down ? ["b","r","n","q"] : ["q","n","r","b"];
+  const veil = document.createElement("div"); veil.className = "promoveil";
+  const box = document.createElement("div"); box.className = "promo";
+  box.style.left = (p.x * 12.5) + "%"; box.style.top = ((down ? p.y - 3 : p.y) * 12.5) + "%";
+  box.innerHTML = order.map(t => `<button type="button" data-p="${t}" title="${PROMO_NAMES[t]}" aria-label="Umwandeln in ${PROMO_NAMES[t]}"><span class="pc ${color} p${t}"></span></button>`).join("");
+  let done = false;
+  const finish = t => { if (done) return; done = true; veil.remove(); box.remove(); document.removeEventListener("keydown", key, true); cb(t); };
+  const key = e => { if (e.key === "Escape"){ e.stopPropagation(); finish(null); } };
+  const stop = e => { e.stopPropagation(); e.preventDefault(); };
+  veil.addEventListener("pointerdown", e => { stop(e); finish(null); });
+  box.addEventListener("pointerdown", e => { stop(e); const b = e.target.closest("button"); if (b) finish(b.dataset.p); });
+  box.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ const b = e.target.closest("button"); if (b){ stop(e); finish(b.dataset.p); } } });
+  document.addEventListener("keydown", key, true);
+  boardEl.append(veil, box);
+  const first = box.querySelector(`[data-p="q"]`); if (first) first.focus({preventScroll:true});
+}
+const promoOpen = el => !!el.querySelector(".promo");
 // Kein Kontextmenü auf einem Brett, auch falls ein Brett neu aufgebaut wird
 document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest(".board")) e.preventDefault(); }, true);
 function arrowSvg(uci, color){
@@ -1162,10 +1189,17 @@ function step(d){
 }
 
 /* ---------- Eigene Züge ---------- */
-function playMove(from, to){
+function playMove(from, to, promo){
   if (!S.game) return false;
   const fen = curFen(), c = new Chess(fen);
-  const mv = c.move({from, to, promotion:"q"});
+  const cand = c.moves({square:from, verbose:true}).filter(m => m.to === to);
+  if (!cand.length) return false;
+  if (cand[0].promotion && !promo){
+    S.sel = null; renderBoard();
+    promoPicker($("board"), sqPos(to), cand[0].color, t => { if (t && curFen() === fen) playMove(from, to, t); else renderBoard(); });
+    return true;
+  }
+  const mv = c.move({from, to, promotion:promo || "q"});
   if (!mv) return false;
   const uci = mv.from + mv.to + (mv.promotion || "");
   S.sel = null;
@@ -1222,7 +1256,7 @@ async function liveLoop(){
         const line = sc[1] === "mate" ? {cp: val > 0 ? 10000 : -10000, mate:val, win: val > 0 ? 100 : 0} : {cp:val, mate:null, win:winPct(val)};
         line.uci = uci[0]; line.pv = uci; line.depth = d;
         Live.lines[k - 1] = line; if (k === 1) Live.depth = d;
-        if (!Live.raf) Live.raf = requestAnimationFrame(() => { Live.raf = 0; liveRender(); if (!drag) renderBoard(); });
+        if (!Live.raf) Live.raf = requestAnimationFrame(() => { Live.raf = 0; liveRender(); if (!drag && !promoOpen($("board"))) renderBoard(); });
       };
       e.ls.push(f);
       e.send("position fen " + fen); e.send("go depth 22");
@@ -1363,7 +1397,7 @@ function endDrag(e, cancel){
 }
 $("board").addEventListener("pointerup", e => endDrag(e, false));
 $("board").addEventListener("pointercancel", e => endDrag(e, true));
-$("lines").onclick = e => { const b = e.target.closest(".line"); if (b) playMove(b.dataset.uci.slice(0,2), b.dataset.uci.slice(2,4)); };
+$("lines").onclick = e => { const b = e.target.closest(".line"); if (b) playMove(b.dataset.uci.slice(0,2), b.dataset.uci.slice(2,4), b.dataset.uci[4] || null); };
 $("bLive").onclick = () => { Live.on = !Live.on; try { localStorage.setItem("zugwerk.live", Live.on ? "1" : "0"); } catch(e){} if (!Live.on) liveRequest(null); else liveRequest(curFen()); liveRender(); };
 $("bFlip").onclick = () => { S.flipped = !S.flipped; render(); };
 $("bAnalyse").onclick = () => runAnalysis(true);
@@ -1425,15 +1459,16 @@ if (!S.cacheDepth) $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858
 // Bekannter Benutzer: Partien gleich laden, damit ein Klick zur Analyse reicht
 if (savedUser) loadChessCom(savedUser.toLowerCase());
 </script>
-<script src="lessons.js?v=20261116a"></script>
-<script src="lessons2.js?v=20261116a"></script>
-<script src="puzzles.js?v=20261116a"></script>
-<script src="openings.js?v=20261116a"></script>
-<script src="openings2.js?v=20261116a"></script>
-<script src="plans.js?v=20261116a"></script>
-<script src="openings-ui.js?v=20261116a"></script>
-<script src="training.js?v=20261116a"></script>
-<script src="sync.js?v=20261116a"></script>
-<script src="spell.js?v=20261116a"></script>
+<script src="lessons.js?v=20261116b"></script>
+<script src="lessons2.js?v=20261116b"></script>
+<script src="puzzles.js?v=20261116b"></script>
+<script src="openings.js?v=20261116b"></script>
+<script src="openings2.js?v=20261116b"></script>
+<script src="plans.js?v=20261116b"></script>
+<script src="plans2.js?v=20261116b"></script>
+<script src="openings-ui.js?v=20261116b"></script>
+<script src="training.js?v=20261116b"></script>
+<script src="sync.js?v=20261116b"></script>
+<script src="spell.js?v=20261116b"></script>
 </body>
 </html>
