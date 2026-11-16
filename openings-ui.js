@@ -126,6 +126,7 @@ function anyOn(bd, sqs, t, c){ return sqs.some(s => pieceAt(bd, s, t, c)); }
 function findAll(bd, t, c){ return Object.keys(bd).filter(s => bd[s].t === t && bd[s].c === c); }
 function planItems(fen, side){
   const bd = boardOf(fen), W = "w", Bk = "b";
+  if (OP.op && OP.op.plan){ const r = OP.op.plan(bd, side, {pieceAt, anyOn, findAll}); if (r) return r; }
   const italian = pieceAt(bd, "e4", "p", W) && pieceAt(bd, "e5", "p", Bk);
   if (!italian) return {italian:false, items:[
     {t:"Figuren entwickeln", why:"Springer und Läufer raus, jede Figur möglichst nur einmal ziehen.", done: side === W ? !anyOn(bd, ["b1","g1","c1","f1"], "n", W) && !pieceAt(bd, "c1", "b", W) && !pieceAt(bd, "f1", "b", W) : !anyOn(bd, ["b8","g8"], "n", Bk) && !pieceAt(bd, "c8", "b", Bk) && !pieceAt(bd, "f8", "b", Bk)},
@@ -170,7 +171,7 @@ function updatePlan(fen, side){
   if (OP.mode === "lesson"){ el.innerHTML = '<div class="empty">Während einer Lektion siehst du die Erklärungen oben.</div>'; return; }
   const {italian, items} = planItems(fen, side);
   const next = items.find(x => !x.done && !x.later);
-  el.innerHTML = `${italian ? "" : '<div class="muted" style="margin-bottom:6px">Keine typische Italienisch-Stellung. Allgemeine Prinzipien:</div>'}
+  el.innerHTML = `${italian ? "" : '<div class="muted" style="margin-bottom:6px">Für diese Stellung gelten die allgemeinen Prinzipien:</div>'}
     ${next ? `<div class="pnext"><div class="muted">Nächster sinnvoller Schritt</div><b>${esc(next.t)}</b><div>${esc(next.why)}</div></div>` : italian ? `<div class="pnext"><b>Aufbau komplett.</b><div>Jetzt geht es ums Mittelspiel: Was will der Gegner, welche deiner Figuren steht am schlechtesten?</div></div>` : ""}
     <div class="pcheck">${items.map(x => `<div class="pitem${x.done ? " done" : x.later ? " later" : ""}${x === next ? " nxt" : ""}" title="${esc(x.why)}"><span class="pdot">${x.done ? "✓" : ""}</span><span class="seq">${esc(x.t)}</span>${x.later && !x.done ? '<span class="lt">später</span>' : ""}</div>`).join("")}</div>
     <div class="muted ptip">Aber zuerst immer: Was hat der letzte Gegnerzug vor? Eine Drohung geht vor jedem Aufbauzug.</div>`;
@@ -212,23 +213,44 @@ function askWhy(key, kind, cont){
 /* ---------- Startansicht des Eröffnungsbereichs ---------- */
 function opHome(){
   clearTimeout(OP.timer); BOT.tok++;
+  const op = OP.op, home = op.home || {moves:"e4 e5 Nf3 Nc6 Bc4", arrows:["c4f7"]}, n = home.moves.split(" ").length;
   OP.mode = "home"; OP.line = null; OP.board.enabled = false;
-  OP.board.set(fenAt({moves:"e4 e5 Nf3 Nc6 Bc4"}, 5).fen(), {orient:OP.op.side, arrows:[{u:"c4f7", c:"rgba(255,170,0,.8)"}]});
-  const plans = LESSONS.filter(l => l.opening === OP.op.id), nextP = plans.find(l => !PR.lessons[l.id]);
-  $("oPanel").innerHTML = `<div class="ttitle">${esc(OP.op.name)}</div>
+  OP.board.set(fenAt({moves:home.moves}, n).fen(), {orient:op.side, arrows:(home.arrows || []).map(u => ({u, c:"rgba(255,170,0,.8)"}))});
+  const plans = LESSONS.filter(l => l.opening === op.id), nextP = plans.find(l => !PR.lessons[l.id]);
+  const due = dueLines(op);
+  $("oPanel").innerHTML = `<div class="ttitle">${esc(op.name)}</div>
     <div class="ttext"><p>So lernst du die Eröffnung so, dass du sie auch verstehst:</p>
-    <ol><li><b>Verstehen:</b> Die ${plans.length} Plan-Lektionen erklären, was beide Seiten wollen und welche Pläne es nach dem Aufbau gibt.</li>
+    <ol>${plans.length ? `<li><b>Verstehen:</b> Die ${plans.length} Plan-Lektionen erklären, was beide Seiten wollen und welche Pläne es nach dem Aufbau gibt.</li>` : `<li><b>Verstehen:</b> Lies rechts „Die Idee“ und „So denkst du in jeder Stellung“.</li>`}
     <li><b>Züge lernen:</b> Varianten im Lernmodus mit Erklärung zu jedem Zug.</li>
-    <li><b>Üben:</b> Du spielst, der Gegner variiert. Zwischendurch fragt dich die Seite, <i>warum</i> ein Zug gespielt wird.</li>
-    <li><b>Anwenden:</b> Gegen den Bot spielen. Die Checkliste „Dein Plan“ zeigt dir in jeder Stellung den nächsten sinnvollen Schritt.</li></ol></div>
+    <li><b>Üben:</b> Du spielst, der Gegner variiert. ${op.quiz ? "Zwischendurch fragt dich die Seite, <i>warum</i> ein Zug gespielt wird." : "Fehler kommen öfter wieder dran."}</li>
+    <li><b>Anwenden:</b> Gegen den Bot spielen. Die Checkliste „Dein Plan“ zeigt dir in jeder Stellung den nächsten sinnvollen Schritt.</li></ol>
+    ${due.length ? `<p><b>${due.length} ${due.length === 1 ? "Variante ist" : "Varianten sind"} zur Wiederholung fällig.</b></p>` : ""}</div>
     <div id="oFb" class="fb"></div>`;
+  const firstNew = allLines(op).find(l => !lineStat(l.id).seen);
   opControls([
-    ...(nextP ? [{label:(plans.indexOf(nextP) === 0 ? "Mit Lektion 1 starten" : "Weiter: " + esc(nextP.title)), primary:true, fn:() => openPlan(nextP.id)}] : []),
-    {label:"Alle Varianten üben", primary:!nextP, fn:() => drill(allLines(OP.op).filter(l => l.set === "system"))},
+    ...(due.length ? [{label:"Fällige wiederholen", primary:true, fn:() => drill(due)}] : []),
+    ...(nextP ? [{label:(plans.indexOf(nextP) === 0 ? "Mit Lektion 1 starten" : "Weiter: " + esc(nextP.title)), primary:!due.length, fn:() => openPlan(nextP.id)}] : []),
+    ...(!nextP && firstNew ? [{label:"Nächste Variante lernen", primary:!due.length, fn:() => learn(firstNew.id, 0)}] : []),
+    {label:"Alle Varianten üben", primary:!nextP && !firstNew && !due.length, fn:() => drill(allLines(op).filter(l => l.set === "system"))},
     {label:"Gegen Bot spielen", fn:showBotSetup}
   ]);
   $("oMoves").innerHTML = '<div class="empty">Wähle rechts eine Variante oder starte eine Lektion.</div>';
   renderOpList();
+}
+// Wiederholung mit wachsendem Abstand: nach 1, 2, 4, 7, 14, 30 Tagen; nach Fehlern schon am nächsten Tag
+function lineDue(l){
+  const s = OP.pr[l.id]; if (!s || !s.seen || l.practice === false) return false;
+  if (s.ok + s.err === 0) return true;
+  const days = s.err > s.ok ? 1 : [1, 2, 4, 7, 14, 30][Math.min(5, Math.max(0, s.ok - 1))];
+  return Date.now() - (s.last || 0) > days * 864e5;
+}
+function dueLines(op){ return allLines(op).filter(lineDue); }
+function switchOpening(id){
+  const op = OPENINGS.find(o => o.id === id); if (!op || op === OP.op) return;
+  OP.op = op; try { localStorage.setItem("zugwerk.op", id); } catch(e){}
+  OG.games = null; OG.sel = null; $("ogList").innerHTML = ""; $("ogSummary").innerHTML = "";
+  $("ogMsg").className = "msg"; $("ogMsg").textContent = "Vergleicht deine Partien der letzten 3 Monate mit der Theorie.";
+  opHome();
 }
 function openPlan(id){
   clearTimeout(OP.timer); BOT.tok++;
@@ -244,7 +266,10 @@ function openPlan(id){
 function renderOpList(){
   const op = OP.op, el = $("oInfo");
   const lines = allLines(op), learned = lines.filter(l => lineStat(l.id).seen).length;
+  const sets = op.id === "italienisch" ? [["system","Alle Varianten üben"], ["ng5","Angriff 4. Sg5 üben"]] : [["system","Alle Varianten üben"]];
+  const due = dueLines(op);
   el.innerHTML = `
+    <div class="modes opsel">${OPENINGS.map(o => `<button class="chipbtn${o === op ? "" : " off"}" data-act="op" data-id="${o.id}">${esc(o.short || o.name)} <small>${o.side === "w" ? "Weiß" : "Schwarz"}</small></button>`).join("")}</div>
     <div class="ophead"><div><div class="ttitle">${esc(op.name)}</div><div class="muted">${op.side === "w" ? "Du spielst Weiß" : "Du spielst Schwarz"} · ${op.eco}</div></div>
       <div class="opcount"><b>${learned}</b>/${lines.length}<div class="muted">gelernt</div></div></div>
     <p class="ttext">${op.summary}</p>
@@ -256,14 +281,14 @@ function renderOpList(){
     <details><summary>Typische Fehler</summary><ul class="ttext">${op.mistakes.map(x => `<li>${x}</li>`).join("")}</ul></details>
 
     <div class="row" style="margin-top:12px">
-      <button class="btn primary" data-act="drill" data-set="system">Alle Varianten üben</button>
-      <button class="btn" data-act="drill" data-set="ng5">Angriff 4. Sg5 üben</button>
+      ${due.length ? `<button class="btn primary" data-act="due">Fällige wiederholen (${due.length})</button>` : ""}
+      ${sets.map(([id, label], i) => `<button class="btn${i === 0 && !due.length ? " primary" : ""}" data-act="drill" data-set="${id}">${label}</button>`).join("")}
       <button class="btn" data-act="bot">Gegen Bot spielen</button>
     </div>`;
   $("oLines").innerHTML = op.groups.map(g => `<div class="chap">${esc(g.title)}</div><div class="muted gnote">${esc(g.note)}</div>` +
     g.lines.map(l => {
       const s = lineStat(l.id), tries = s.ok + s.err;
-      const badge = l.practice === false ? '<span class="lt warn">nur ansehen</span>' : tries ? `<span class="lt">${Math.round(s.ok / tries * 100)} % richtig</span>` : "";
+      const badge = l.practice === false ? '<span class="lt warn">nur ansehen</span>' : lineDue(l) ? `<span class="lt warn">${tries ? "fällig" : "noch üben"}</span>` : tries ? `<span class="lt">${Math.round(s.ok / tries * 100)} % richtig</span>` : "";
       const cur = OP.line === l ? " cur" : "";
       return `<div class="lrow${cur}"><span class="chk${s.seen ? " on" : ""}">${s.seen ? "✓" : ""}</span>
         <button class="lname" data-act="learn" data-id="${l.id}">${esc(l.name)}</button>${badge}
@@ -509,7 +534,7 @@ async function loadOpeningGames(){
       let sans;
       try { const c = new Chess(); if (!c.load_pgn(g.pgn, {sloppy:true})) continue; sans = c.history(); } catch(e){ continue; }
       // Als Weiß: alles nach 1. e4 e5 2. Sf3 (dein Repertoire). Als Schwarz: wenn der Gegner Italienisch spielt.
-      const ok = meW ? sans.slice(0, 3).join(" ") === "e4 e5 Nf3" : sans.slice(0, 5).join(" ") === "e4 e5 Nf3 Nc6 Bc4";
+      const ok = op.match ? op.match(sans, meW) : meW ? sans.slice(0, 3).join(" ") === "e4 e5 Nf3" : sans.slice(0, 5).join(" ") === "e4 e5 Nf3 Nc6 Bc4";
       if (!ok) continue;
       const me = meW ? g.white : g.black, opp = meW ? g.black : g.white;
       const res = me.result === "win" ? "win" : ["agreed","repetition","stalemate","insufficient","50move","timevsinsufficient"].includes(me.result) ? "draw" : "loss";
@@ -681,16 +706,18 @@ function bookCands(path){ return bookLines().filter(l => { const mv = mvList(l);
 function showBotSetup(){
   clearTimeout(OP.timer); BOT.tok++;
   OP.mode = "botsetup"; OP.board.enabled = false;
-  const cfg = botCfg();
+  const cfg = botCfg(), op = OP.op;
+  cfg.color = (cfg.colors || {})[op.id] || op.side;
+  const lab = c => (c === "w" ? "Weiß" : "Schwarz") + (c === op.side ? " (dein Repertoire)" : " (die Gegenseite)");
   OP.board.set(START_FEN, {orient:cfg.color});
   $("oPanel").innerHTML = `<div class="ttitle">Gegen den Bot spielen</div>
     <div class="ttext">Der Bot spielt die ersten Züge nach der Theorie und wählt dabei zufällig verschiedene Varianten, auch die Fallen. Weichst du ab, sagt er dir, was die Theorie wäre. Danach spielt er in der gewählten Stärke weiter.</div>
     <div class="botopts">
-      <label>Deine Farbe <select id="botColor"><option value="w"${cfg.color === "w" ? " selected" : ""}>Weiß (dein Repertoire)</option><option value="b"${cfg.color === "b" ? " selected" : ""}>Schwarz (gegen Italienisch)</option></select></label>
+      <label>Deine Farbe <select id="botColor"><option value="w"${cfg.color === "w" ? " selected" : ""}>${lab("w")}</option><option value="b"${cfg.color === "b" ? " selected" : ""}>${lab("b")}</option></select></label>
       <label>Stärke <select id="botLevel">${BOT_LEVELS.map(l => `<option value="${l.id}"${cfg.level === l.id ? " selected" : ""}>${l.name}</option>`).join("")}</select></label>
     </div><div id="oFb" class="fb"></div>`;
   opControls([{label:"Partie starten", primary:true, fn:() => {
-    const c = {color:$("botColor").value, level:$("botLevel").value}; saveBotCfg(c); startBot(c);
+    const c = {color:$("botColor").value, level:$("botLevel").value, colors:Object.assign({}, cfg.colors, {[op.id]:$("botColor").value})}; saveBotCfg(c); startBot(c);
   }}]);
   $("oMoves").innerHTML = '<div class="empty">Noch keine Züge.</div>';
 }
@@ -823,11 +850,12 @@ function opControls(btns){
 function initOpenings(){
   OP.pr = loadOpProgress();
   if (OP.board){ renderOpList(); return; }
-  OP.op = OPENINGS[0];
+  let saved = ""; try { saved = localStorage.getItem("zugwerk.op") || ""; } catch(e){}
+  OP.op = OPENINGS.find(o => o.id === saved) || OPENINGS[0];
   OP.board = new TBoard($("oBoard"));
   const origSet = OP.board.set.bind(OP.board);
   OP.board.set = (fen, o) => { origSet(fen, o); updatePlan(fen, OP.board.orient); };
-  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); if (b.dataset.act === "bot") showBotSetup(); if (b.dataset.act === "plan") openPlan(b.dataset.id); };
+  $("oInfo").onclick = e => { const b = e.target.closest("[data-act]"); if (!b) return; if (b.dataset.act === "drill") drill(allLines(OP.op).filter(l => l.set === b.dataset.set)); if (b.dataset.act === "bot") showBotSetup(); if (b.dataset.act === "plan") openPlan(b.dataset.id); if (b.dataset.act === "op") switchOpening(b.dataset.id); if (b.dataset.act === "due") drill(dueLines(OP.op)); };
   $("oLines").onclick = e => {
     const b = e.target.closest("[data-act]"); if (!b) return;
     const line = allLines(OP.op).find(l => l.id === b.dataset.id);

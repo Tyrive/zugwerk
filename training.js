@@ -18,7 +18,7 @@ function dayKey(d){ d = d || new Date(); return d.getFullYear() + "-" + String(d
 function loadProgress(){
   let p = null;
   try { p = JSON.parse(localStorage.getItem("zugwerk.progress")); } catch(e){}
-  return Object.assign({rating:400, solved:0, failed:0, seen:{}, lessons:{}, days:{}, cleared:{}, updated:0}, p || {});
+  return Object.assign({rating:400, solved:0, failed:0, seen:{}, lessons:{}, days:{}, cleared:{}, tags:{}, retry:{}, rush:0, coords:0, updated:0}, p || {});
 }
 let PR = loadProgress();
 function saveProgress(){ PR.updated = Date.now(); try { localStorage.setItem("zugwerk.progress", JSON.stringify(PR)); } catch(e){} if (window.zwSyncSoon) zwSyncSoon(); }
@@ -214,6 +214,7 @@ class TBoard{
   bind(){
     const el = this.el;
     el.addEventListener("pointerdown", e => {
+      if (this.onSquare && e.button === 0){ const q = this.sqAt(e.clientX, e.clientY); if (q) this.onSquare(q); return; }
       if (!this.enabled || e.button > 0) return;
       const sq = this.sqAt(e.clientX, e.clientY); if (!sq) return;
       const c = new Chess(this.fen), p = c.get(sq);
@@ -253,7 +254,7 @@ function useCtx(ctx){
 }
 window.zwUseCtx = useCtx;
 function pq(sel){ return $(TR.ids.panel).querySelector(sel); }
-function panel(html){ $(TR.ids.panel).innerHTML = html; }
+function panel(html){ $(TR.ids.panel).innerHTML = (TR.session && TR.ctx === "training" ? sessBar() : "") + html; }
 function feedback(kind, html){ const f = pq("#tFb"); if (!f) return; f.className = "fb " + (kind || ""); f.innerHTML = html; }
 function controls(btns){
   $(TR.ids.ctl).innerHTML = btns.map((b, i) => `<button class="btn${b.primary ? " primary" : ""}" data-i="${i}"${b.disabled ? " disabled" : ""}>${b.label}</button>`).join("");
@@ -264,13 +265,20 @@ const sideTxt = fen => fen.split(" ")[1] === "w" ? "Weiß" : "Schwarz";
 /* ---------- Rätsel ---------- */
 function pickPuzzle(modeId){
   const mode = MODES.find(m => m.id === modeId) || MODES[0];
-  const all = (window.PUZZLES || []).map((p, i) => ({p, i})).filter(x => mode.f(x.p));
+  const P = window.PUZZLES || [], curIdx = TR.pz ? TR.pz.idx : -1, now = Date.now();
+  // Verpatzte Rätsel kommen wieder: nach 10 Minuten, nach einem Tag, nach vier Tagen
+  const due = Object.keys(PR.retry).map(Number).filter(i => P[i] && i !== curIdx && PR.retry[i][1] <= now && mode.f(P[i])).sort((a, b) => PR.retry[a][1] - PR.retry[b][1]);
+  if (due.length && (due.length >= 4 || Math.random() < .5)) return {p:P[due[0]], i:due[0], retry:true};
+  const all = P.map((p, i) => ({p, i})).filter(x => mode.f(x.p) && x.i !== curIdx);
   if (!all.length) return null;
   const scored = all.map(x => ({x, s: Math.abs(x.p[3] - PR.rating) + Math.random() * 200 + (PR.seen[x.i] ? 600 : 0)}));
   scored.sort((a, b) => a.s - b.s);
   return scored[0].x;
 }
-function startPuzzle(modeId){
+const nextPuzzle = pz => TR.session ? sessionNext() : startPuzzle(pz.mode);
+function startPuzzle(modeId, forced){
+  const rush = !!(forced && forced.rush);
+  resetBoardMode(rush);
   TR.mode = "puzzle";
   let pz;
   if (modeId === "mistakes"){
@@ -280,32 +288,51 @@ function startPuzzle(modeId){
     const m = list[0];
     pz = {kind:"mistake", fen:m.fen, line:[m.best], tag:"mistake", r:null, ref:m.fen, mode:modeId, played:m.played, opp:m.opp};
   } else {
-    const x = pickPuzzle(modeId);
+    const x = forced || pickPuzzle(modeId);
     if (!x) return showHomePanel("Für diese Kategorie gibt es noch keine Rätsel.");
     const p = x.p;
-    pz = {kind: p[2].startsWith("mate") ? "mate" : "tactic", fen:p[0], line:p[1].split(" "), tag:p[2], r:p[3], idx:x.i, mode:modeId};
+    pz = {kind: p[2].startsWith("mate") ? "mate" : "tactic", fen:p[0], line:p[1].split(" "), tag:p[2], r:p[3], idx:x.i, mode:modeId, retry:!!x.retry, rush};
   }
   Object.assign(pz, {step:0, now:pz.fen, failed:false, hinted:false, done:false, side:pz.fen.split(" ")[1]});
   TR.pz = pz;
   const b = TR.board;
   b.enabled = true; b.onMove = puzzleMove;
   b.set(pz.fen, {orient:pz.side});
-  const title = pz.kind === "mistake" ? `Dein Fehler gegen ${esc(pz.opp || "?")}` : `${TAGS[pz.tag]} · ca. ${pz.r} Elo`;
+  if (rush){
+    panel(`${rushHead()}<div class="ttext">${sideTxt(pz.fen)} am Zug. ${pz.kind === "mate" ? "Finde das Matt." : "Finde den besten Zug."}</div><div id="tFb" class="fb"></div><div id="tExp" class="texp"></div>`);
+    return controls([{label:"Sturm beenden", fn:rushEnd}]);
+  }
+  const title = pz.kind === "mistake" ? `Dein Fehler gegen ${esc(pz.opp || "?")}` : `${pz.retry ? "Wiederholung · " : ""}${TAGS[pz.tag]} · ca. ${pz.r} Elo`;
   panel(`<div class="ttitle">${title}</div>
     <div class="ttext">${sideTxt(pz.fen)} am Zug. ${pz.kind === "mate" ? "Finde das Matt." : pz.kind === "mistake" ? `In der Partie hast du <b class="mono">${esc(de(sanOf(pz.fen, pz.played)))}</b> gespielt. Finde den besseren Zug.` : "Finde den besten Zug."}</div>
     <div id="tFb" class="fb"></div><div id="tExp" class="texp"></div>`);
   controls([
     {label:"Hinweis", fn:puzzleHint},
     {label:"Lösung zeigen", fn:puzzleSolution},
-    {label:"Überspringen", fn:() => startPuzzle(pz.mode)}
+    {label:"Überspringen", fn:() => startPuzzle(pz.mode)},
+    {label:"Übersicht", fn:() => lessonHome()}
   ]);
 }
 function sanOf(fen, uci){ try { const c = new Chess(fen), m = c.move(U(uci)); return m ? m.san : uci; } catch(e){ return uci; } }
+const RETRY_GAP = [10 * 60e3, 864e5, 4 * 864e5];
+function retryUpdate(idx, ok){
+  const r = PR.retry[idx];
+  if (!ok){ PR.retry[idx] = [0, Date.now() + RETRY_GAP[0]]; return; }
+  if (!r) return;
+  const st = r[0] + 1;
+  if (st >= RETRY_GAP.length) delete PR.retry[idx]; else PR.retry[idx] = [st, Date.now() + RETRY_GAP[st]];
+}
 function rate(score){
-  const pz = TR.pz; if (pz.rated || pz.kind === "mistake") return; pz.rated = true;
+  const pz = TR.pz; if (pz.rated || pz.kind === "mistake" || pz.rush) return; pz.rated = true;
+  // Wiederholungen zählen nicht für die Wertung, sie steuern nur, wann das Rätsel wiederkommt
+  if (pz.retry){ retryUpdate(pz.idx, score >= 1); saveProgress(); return; }
   const exp = 1 / (1 + Math.pow(10, (pz.r - PR.rating) / 400));
   PR.rating = Math.max(100, Math.round(PR.rating + 32 * (score - exp)));
   if (score >= .5) PR.solved++; else PR.failed++;
+  const t = PR.tags[pz.tag] || (PR.tags[pz.tag] = {ok:0, fail:0});
+  if (score >= .5) t.ok++; else t.fail++;
+  if (score === 0) retryUpdate(pz.idx, false);
+  today().r = PR.rating;
   saveProgress();
 }
 async function puzzleMove(uci, m, after){
@@ -337,6 +364,7 @@ async function puzzleMove(uci, m, after){
     }, 450);
     return;
   }
+  if (pz.rush) return rushMiss(m.to);
   if (!pz.failed){ pz.failed = true; rate(0); }
   b.enabled = false; b.mark = {sq:m.to, ok:false}; b.render();
   feedback("bad", "Das ist nicht der beste Zug. Versuch es nochmal.");
@@ -349,7 +377,9 @@ function puzzleSolved(alt, sq){
   const pz = TR.pz, b = TR.board;
   pz.done = true; b.enabled = false;
   if (sq){ b.mark = {sq, ok:true}; b.render(); }
+  if (pz.rush) return rushHit();
   if (!pz.failed) rate(pz.hinted ? .5 : 1);
+  TR.run = !pz.failed && !pz.hinted ? (TR.run || 0) + 1 : 0;
   if (pz.kind === "mistake"){
     const list = loadMistakes(), m = list.find(x => x.fen === pz.ref);
     if (m){ m.n++; if (!pz.failed && !pz.hinted && m.n >= 2){ list.splice(list.indexOf(m), 1); PR.cleared[m.fen] = 1; saveProgress(); } saveMistakes(list); }
@@ -357,9 +387,9 @@ function puzzleSolved(alt, sq){
   } else { PR.seen[pz.idx] = 1; saveProgress(); bump("p"); }
   const msg = pz.failed ? "Gelöst, aber nicht im ersten Versuch." : alt ? "Auch richtig! Dein Zug ist genauso stark." : "Gelöst!";
   explainDone(pz);
-  feedback("good", `${msg}${pz.kind !== "mistake" ? ` Deine Rätselwertung: <b>${PR.rating}</b>` : ""}`);
+  feedback("good", `${msg}${pz.kind !== "mistake" && !pz.retry ? ` Deine Rätselwertung: <b>${PR.rating}</b>` : ""}${pz.retry && !pz.failed ? " Die Wiederholung sitzt." : ""}${TR.run >= 3 ? ` · <b>${TR.run}</b> in Folge im ersten Versuch` : ""}`);
   controls([
-    {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
+    {label:TR.session ? "Weiter" : "Nächstes Rätsel", primary:true, fn:() => nextPuzzle(pz)},
     {label:"Lösung ansehen", fn:puzzleSolution},
     {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
     {label:"Übersicht", fn:() => lessonHome()}
@@ -389,6 +419,7 @@ function puzzleHint(){
 function puzzleSolution(){
   const pz = TR.pz; if (!pz) return;
   if (!pz.done && !pz.failed){ pz.failed = true; rate(0); }
+  if (!pz.done){ TR.run = 0; if (pz.kind !== "mistake"){ PR.seen[pz.idx] = 1; bump("p"); } else bump("m"); }
   pz.done = true;
   const b = TR.board; b.enabled = false;
   const c = new Chess(pz.fen), sans = [];
@@ -403,7 +434,7 @@ function puzzleSolution(){
   };
   setTimeout(stepFn, 300);
   controls([
-    {label:"Nächstes Rätsel", primary:true, fn:() => startPuzzle(pz.mode)},
+    {label:TR.session ? "Weiter" : "Nächstes Rätsel", primary:true, fn:() => nextPuzzle(pz)},
     {label:"Im Analysebrett öffnen", fn:() => puzzleToAnalysis(pz)},
     {label:"Übersicht", fn:() => lessonHome()}
   ]);
@@ -412,6 +443,7 @@ function puzzleSolution(){
 /* ---------- Lektionen ---------- */
 function openLesson(id){
   const les = LESSONS.find(l => l.id === id); if (!les) return;
+  if (TR.ctx === "training") resetBoardMode();
   TR.mode = "lesson"; TR.ls = {les, i:0};
   showStep();
 }
@@ -423,7 +455,7 @@ function showStep(){
   b.enabled = s.type !== "info" && s.type !== "quiz";
   b.set(s.fen, {orient: s.orient || (s.type === "info" || s.type === "quiz" ? "w" : side), arrows:(s.arrows || []).map(u => ({u, c:"#ffaa00"}))});
   const intro = i === 0 && les.intro ? `<p class="muted">${les.intro}</p>` : "";
-  panel(`<div class="ttitle">${esc(les.title)} <span class="muted">· Schritt ${i + 1} von ${les.steps.length}</span></div>
+  panel(`<div class="ttitle"><span class="nospell">${esc(les.title)}</span> <span class="muted">· Schritt ${i + 1} von ${les.steps.length}</span></div>
     ${intro}<div class="ttext">${s.text}</div>
     ${s.type === "play" ? `<div class="muted" id="tCount">Züge: 0 / ${s.max}</div>` : ""}
     ${s.type === "quiz" ? `<div class="qopts">${shuffledOpts(s).map(o => `<button class="qopt" data-k="${o.k}">${esc(o.t)}</button>`).join("")}</div>` : ""}
@@ -554,6 +586,7 @@ function finishLesson(){
   }
   const next = TLESSONS().find(l => !PR.lessons[l.id]);
   panel(`<div class="ttitle">Lektion abgeschlossen</div><div class="ttext">${first ? "Neu gelernt: " : "Wiederholt: "}<b>${esc(les.title)}</b>. Festige es jetzt mit ein paar Rätseln.</div><div id="tFb" class="fb"></div>`);
+  if (TR.session) return controls([{label:"Weiter im Tagestraining", primary:true, fn:sessionNext}, {label:"Übersicht", fn:() => lessonHome()}]);
   controls([
     {label:"Rätsel üben", primary:true, fn:() => startPuzzle(les.chapter === "Mattbilder" ? "mate" : "mix")},
     ...(next ? [{label:"Nächste Lektion", fn:() => openLesson(next.id)}] : []),
@@ -562,17 +595,185 @@ function finishLesson(){
 }
 
 /* ---------- Übersicht ---------- */
+// Beendet Sondermodi (Sturm, Felder finden), bevor etwas anderes auf dem Trainingsbrett startet
+function resetBoardMode(keepRush){
+  const b = TR.trainBoard; if (!b) return;
+  b.onSquare = null; b.el.classList.remove("nocoord");
+  clearInterval(TR.coT); if (TR.co) TR.co.on = false;
+  if (!keepRush && TR.rush){ clearInterval(TR.rushT); TR.rush = null; }
+}
 function showHomePanel(note){
+  resetBoardMode(); TR.session = false;
   TR.mode = null; TR.board.enabled = false; TR.board.set(START_FEN, {orient:"w"});
   const next = TLESSONS().find(l => !PR.lessons[l.id]);
-  const mist = loadMistakes().length;
+  const mist = loadMistakes().length, st = sessionStep(), d = today();
+  const left = [];
+  if (st.k !== "done"){
+    if (d.l < GOAL.l && next) left.push("eine Lektion");
+    if (d.p < GOAL.p) left.push(`${GOAL.p - d.p} Rätsel`);
+    if (mist && d.m < GOAL.m) left.push(`${Math.min(GOAL.m - d.m, mist)} eigene Fehler`);
+  }
   panel(`<div class="ttitle">Training</div>
-    <div class="ttext">${note ? `<p class="fb bad">${note}</p>` : ""}<p>Täglich 15 Minuten reichen: <b>10 Rätsel</b>, <b>eine Lektion</b> und deine <b>eigenen Fehler</b> aus analysierten Partien wiederholen.</p></div>`);
+    <div class="ttext">${note ? `<p class="fb bad">${note}</p>` : ""}${st.k === "done"
+      ? `<p><b>Tagesziel erreicht.</b> Du kannst frei weiterüben oder eine Partie spielen und danach analysieren.</p>`
+      : `<p>Das <b>Tagestraining</b> führt dich in etwa 15 Minuten durch alles, was heute noch offen ist: ${listDe(left)}.</p>`}</div>`);
   controls([
-    {label:"Rätsel starten", primary:true, fn:() => startPuzzle("mix")},
-    ...(next ? [{label:"Nächste Lektion: " + esc(next.title), fn:() => openLesson(next.id)}] : []),
+    ...(st.k === "done" ? [{label:"Rätsel starten", primary:true, fn:() => startPuzzle("mix")}] : [{label:d.p + d.l + d.m ? "Tagestraining fortsetzen" : "Tagestraining starten", primary:true, fn:sessionNext}, {label:"Nur Rätsel", fn:() => startPuzzle("mix")}]),
+    ...(next ? [{label:"Lektion: " + esc(next.title), fn:() => openLesson(next.id)}] : []),
     ...(mist ? [{label:`Eigene Fehler (${mist})`, fn:() => startPuzzle("mistakes")}] : [])
   ]);
+}
+
+/* ---------- Tagestraining: geführte Einheit aus Lektion, Rätseln und eigenen Fehlern ---------- */
+function sessionStep(){
+  const d = today(), next = TLESSONS().find(l => !PR.lessons[l.id]), mist = loadMistakes().length;
+  if (d.l < GOAL.l && next) return {k:"lesson", next};
+  if (d.p < GOAL.p) return {k:"puzzle"};
+  if (mist && d.m < GOAL.m) return {k:"mistake"};
+  return {k:"done"};
+}
+function sessBar(){
+  const d = today(), mist = loadMistakes().length, k = sessionStep().k;
+  const it = (on, t) => `<span class="${on ? "on" : ""}">${t}</span>`;
+  return `<div class="sess"><b>Tagestraining</b>${it(k === "lesson", `Lektion ${Math.min(d.l, GOAL.l)}/${GOAL.l}`)}${it(k === "puzzle", `Rätsel ${Math.min(d.p, GOAL.p)}/${GOAL.p}`)}${mist || d.m ? it(k === "mistake", `Eigene Fehler ${Math.min(d.m, GOAL.m)}/${GOAL.m}`) : ""}</div>`;
+}
+function sessionNext(){
+  useCtx("training"); TR.session = true;
+  const s = sessionStep();
+  if (s.k === "lesson") return openLesson(s.next.id);
+  if (s.k === "puzzle"){ const w = weakestMode(); return startPuzzle(w && today().p % 2 === 1 ? w : "mix"); }
+  if (s.k === "mistake") return startPuzzle("mistakes");
+  resetBoardMode(); TR.mode = null; TR.board.enabled = false;
+  const st = streak();
+  panel(`<div class="ttitle">Tagestraining geschafft!</div><div class="ttext"><p>Lektion, Rätsel und eigene Fehler sind für heute erledigt. ${st > 1 ? `Das ist dein <b>${st}. Tag in Folge</b>.` : "Morgen geht es weiter, dann beginnt deine Serie."}</p><p>Am meisten bringt es jetzt, eine <b>Partie zu spielen</b> und sie danach hier zu analysieren.</p></div><div id="tFb" class="fb"></div>`);
+  TR.session = false;
+  controls([
+    {label:"Eröffnung üben", primary:true, fn:() => { location.hash = "#openings"; }},
+    {label:"Rätsel-Sturm", fn:startRush},
+    {label:"Noch mehr Rätsel", fn:() => startPuzzle("mix")},
+    {label:"Übersicht", fn:() => showHomePanel()}
+  ]);
+}
+
+/* ---------- Stärken und Schwächen nach Thema ---------- */
+const THEMES = [["hanging","Figur schlagen"], ["fork","Gabel"], ["mate","Matt"], ["tactic","Taktik"]];
+function themeStat(id){
+  let ok = 0, fail = 0;
+  Object.keys(PR.tags || {}).forEach(t => { if (t === id || (id === "mate" && t.startsWith("mate"))){ ok += PR.tags[t].ok || 0; fail += PR.tags[t].fail || 0; } });
+  return {n:ok + fail, pct: ok + fail ? ok / (ok + fail) * 100 : null};
+}
+function weakestMode(){
+  const c = THEMES.map(([id]) => Object.assign({id}, themeStat(id))).filter(x => x.n >= 5 && x.pct < 80).sort((a, b) => a.pct - b.pct)[0];
+  return c ? c.id : null;
+}
+function themesHtml(){
+  const weak = weakestMode();
+  return `<div class="chap" style="margin-top:14px">Deine Trefferquote nach Thema</div>` + THEMES.map(([id, label]) => {
+    const s = themeStat(id);
+    return `<button class="trow" data-mode="${id}"><span>${label}${weak === id ? ' <span class="lt warn">Schwäche · hier üben</span>' : ""}</span><b class="nospell">${s.n >= 5 ? Math.round(s.pct) + " %" : "–"}</b>
+      <span class="pbar"><i style="width:${s.n >= 5 ? s.pct : 0}%;${s.n >= 5 && s.pct < 60 ? "background:var(--c-mistake)" : ""}"></i></span>
+      <span class="muted">${s.n >= 5 ? s.n + " gewertete Rätsel" : "noch zu wenig Rätsel für eine Aussage"}</span></button>`;
+  }).join("");
+}
+function sparkHtml(){
+  const pts = Object.keys(PR.days).sort().filter(k => PR.days[k].r).slice(-30).map(k => PR.days[k].r);
+  if (pts.length < 2) return "";
+  const lo = Math.min(...pts) - 20, hi = Math.max(...pts) + 20, W = 300, H = 46;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1) * W).toFixed(1), (H - (v - lo) / (hi - lo) * H).toFixed(1)]);
+  const diff = pts[pts.length - 1] - pts[0];
+  return `<div class="spark"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Verlauf der Rätselwertung"><polyline points="${xy.map(p => p.join(",")).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <div class="muted">Rätselwertung über ${pts.length} Trainingstage: <b class="nospell" style="color:${diff >= 0 ? "var(--c-best)" : "var(--c-mistake)"}">${diff >= 0 ? "+" : ""}${diff}</b></div></div>`;
+}
+
+/* ---------- Rätsel-Sturm: 3 Minuten, 3 Leben, die Rätsel werden schwerer ---------- */
+function startRush(){
+  useCtx("training"); TR.session = false; clearInterval(TR.rushT);
+  TR.rush = {lives:3, score:0, end:Date.now() + 180000, used:{}, level:400};
+  TR.rushT = setInterval(rushTick, 250);
+  rushNext();
+}
+const mmss = ms => { const t = Math.max(0, Math.ceil(ms / 1000)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+function rushHead(){
+  const r = TR.rush;
+  return `<div class="rushbar"><span class="big nospell" id="rushT">${mmss(r.end - Date.now())}</span><span class="hearts">${"♥".repeat(r.lives)}<i>${"♥".repeat(3 - r.lives)}</i></span><span><b class="nospell">${r.score}</b> gelöst</span><span class="muted">Rätsel-Sturm</span></div>`;
+}
+function rushNext(){
+  const r = TR.rush; if (!r) return;
+  const P = window.PUZZLES || [];
+  const c = P.map((p, i) => ({p, i})).filter(x => !r.used[x.i]).map(x => ({x, s:Math.abs(x.p[3] - r.level) + Math.random() * 120})).sort((a, b) => a.s - b.s)[0];
+  if (!c) return rushEnd();
+  r.used[c.x.i] = 1;
+  startPuzzle("rush", {p:c.x.p, i:c.x.i, rush:true});
+}
+function rushTick(){
+  const r = TR.rush;
+  if (!r || document.body.dataset.view !== "training"){ clearInterval(TR.rushT); TR.rush = null; return; }
+  const el = pq("#rushT"); if (el) el.textContent = mmss(r.end - Date.now());
+  if (Date.now() >= r.end) rushEnd();
+}
+function rushHit(){
+  const r = TR.rush; if (!r) return;
+  r.score++; r.level += 30;
+  feedback("good", "Richtig!");
+  setTimeout(() => { if (TR.rush === r) rushNext(); }, 350);
+}
+function rushMiss(sq){
+  const r = TR.rush, pz = TR.pz, b = TR.board; if (!r) return;
+  r.lives--; pz.done = true; b.enabled = false; b.mark = {sq, ok:false}; b.render();
+  feedback("bad", `Falsch. Richtig war <b class="mono">${esc(de(sanOf(pz.now, pz.line[pz.step])))}</b>.`);
+  setTimeout(() => { if (TR.rush !== r) return; if (r.lives <= 0) rushEnd(); else rushNext(); }, 1100);
+}
+function rushEnd(){
+  const r = TR.rush; clearInterval(TR.rushT); TR.rush = null; if (!r) return;
+  const best = Math.max(PR.rush || 0, r.score), record = r.score > (PR.rush || 0);
+  PR.rush = best; saveProgress(); renderHome();
+  if (TR.pz) TR.pz.done = true; TR.board.enabled = false; TR.mode = null;
+  panel(`<div class="ttitle">Rätsel-Sturm beendet</div><div class="stats"><div><div class="big">${r.score}</div><div class="muted">gelöst</div></div><div><div class="big">${best}</div><div class="muted">Bestwert</div></div><div><div class="big">${r.lives}</div><div class="muted">Leben übrig</div></div></div>
+    <div id="tFb" class="fb ${record ? "good" : ""}">${record && r.score ? "Neuer Bestwert!" : r.lives <= 0 ? "Alle Leben verbraucht. Lieber einen Moment länger hinschauen als raten." : "Zeit abgelaufen."}</div>`);
+  controls([{label:"Nochmal", primary:true, fn:startRush}, {label:"Übersicht", fn:() => showHomePanel()}]);
+}
+
+/* ---------- Felder finden: Koordinaten in 30 Sekunden ---------- */
+function startCoords(){
+  useCtx("training"); resetBoardMode(); TR.session = false; TR.mode = "coords";
+  const b = TR.board; b.enabled = false; b.set(START_FEN, {orient:"w"});
+  panel(`<div class="ttitle">Felder finden</div><div class="ttext"><p>Jedes Feld hat einen Namen aus Buchstabe und Zahl. Die <b>Buchstaben a bis h</b> laufen aus Sicht von Weiß von links nach rechts, die <b>Zahlen 1 bis 8</b> von unten nach oben.</p><p>Gleich erscheint ein Feldname. Klick so schnell wie möglich auf das richtige Feld. Du hast 30 Sekunden.</p></div>
+    <div class="muted">Bestwert: <b class="nospell">${PR.coords || 0}</b></div><div id="tFb" class="fb"></div>`);
+  controls([{label:"Start als Weiß", primary:true, fn:() => coordsGo("w")}, {label:"Start als Schwarz", fn:() => coordsGo("b")}, {label:"Übersicht", fn:() => showHomePanel()}]);
+}
+function coordsGo(o){
+  const b = TR.board;
+  TR.co = {score:0, err:0, end:Date.now() + 30000, tgt:null, o, on:true};
+  b.set(START_FEN, {orient:o}); b.el.classList.add("nocoord"); b.onSquare = coordsClick;
+  clearInterval(TR.coT);
+  TR.coT = setInterval(() => {
+    const c = TR.co; if (!c || !c.on || document.body.dataset.view !== "training"){ clearInterval(TR.coT); return; }
+    const el = pq("#coT"); if (el) el.textContent = mmss(c.end - Date.now());
+    if (Date.now() >= c.end) coordsEnd();
+  }, 200);
+  coordsTarget();
+  controls([{label:"Abbrechen", fn:startCoords}]);
+}
+function coordsTarget(msg){
+  const c = TR.co; let t;
+  do { t = FILES[Math.floor(Math.random() * 8)] + (1 + Math.floor(Math.random() * 8)); } while (t === c.tgt);
+  if (!msg) c.tgt = t;
+  panel(`<div class="rushbar"><span class="big nospell" id="coT">${mmss(c.end - Date.now())}</span><span><b class="nospell">${c.score}</b> richtig</span><span class="muted"><span class="nospell">${c.err}</span> falsch</span><span class="muted">Felder finden</span></div>
+    <div class="coordbig nospell">${c.tgt}</div><div id="tFb" class="fb bad nospell">${msg || ""}</div>`);
+}
+function coordsClick(sq){
+  const c = TR.co, b = TR.board; if (!c || !c.on) return;
+  if (sq === c.tgt){ c.score++; b.mark = {sq, ok:true}; b.render(); coordsTarget(); }
+  else { c.err++; b.mark = {sq, ok:false}; b.render(); coordsTarget(`Das war ${sq}.`); }
+}
+function coordsEnd(){
+  const c = TR.co, b = TR.board; if (!c) return;
+  c.on = false; clearInterval(TR.coT); b.onSquare = null; b.el.classList.remove("nocoord"); b.mark = null; b.render();
+  const record = c.score > (PR.coords || 0);
+  PR.coords = Math.max(PR.coords || 0, c.score); saveProgress(); renderHome();
+  panel(`<div class="ttitle">Felder finden</div><div class="stats"><div><div class="big">${c.score}</div><div class="muted">richtig</div></div><div><div class="big">${c.err}</div><div class="muted">falsch</div></div><div><div class="big">${PR.coords}</div><div class="muted">Bestwert</div></div></div>
+    <div id="tFb" class="fb ${record ? "good" : ""}">${record && c.score ? "Neuer Bestwert!" : c.score >= 20 ? "Sehr sicher. Die Notation sitzt." : "Ab etwa 20 Feldern in 30 Sekunden liest du Notation flüssig."}</div>`);
+  controls([{label:"Nochmal als Weiß", primary:true, fn:() => coordsGo("w")}, {label:"Nochmal als Schwarz", fn:() => coordsGo("b")}, {label:"Übersicht", fn:() => showHomePanel()}]);
 }
 function bar(v, max){ const p = Math.min(100, v / max * 100); return `<div class="pbar"><i style="width:${p}%"></i></div>`; }
 function renderHome(){
@@ -584,6 +785,7 @@ function renderHome(){
       <div><div class="big">${st}</div><div class="muted">${st === 1 ? "Tag" : "Tage"} in Folge</div></div>
       <div><div class="big">${PR.solved}</div><div class="muted">Rätsel gelöst</div></div>
     </div>
+    ${sparkHtml()}
     <div class="goals">
       <div class="goal"><span>Rätsel</span><b>${Math.min(d.p, GOAL.p)} / ${GOAL.p}</b>${bar(d.p, GOAL.p)}</div>
       <div class="goal"><span>Lektion</span><b>${Math.min(d.l, GOAL.l)} / ${GOAL.l}</b>${bar(d.l, GOAL.l)}</div>
@@ -593,6 +795,12 @@ function renderHome(){
   const counts = {}; MODES.forEach(m => counts[m.id] = (window.PUZZLES || []).filter(m.f).length);
   $("tModes").innerHTML = MODES.map(m => `<button class="chipbtn" data-mode="${m.id}">${m.label} <small>${counts[m.id]}</small></button>`).join("") +
     `<button class="chipbtn${mist ? "" : " off"}" data-mode="mistakes">Eigene Fehler <small>${mist}</small></button>`;
+  const due = Object.keys(PR.retry || {}).filter(i => PR.retry[i][1] <= Date.now()).length;
+  $("tThemes").innerHTML = themesHtml() + (due ? `<div class="muted" style="margin-top:8px"><span class="nospell">${due}</span> verpatzte Rätsel sind zur Wiederholung fällig. Sie kommen beim Üben automatisch dran.</div>` : "");
+  $("tGames").innerHTML = `
+    <button class="gcard" data-g="rush"><b>Rätsel-Sturm</b><span class="muted">3 Minuten, 3 Leben, die Rätsel werden schwerer. Bestwert: <span class="nospell">${PR.rush || 0}</span></span></button>
+    <button class="gcard" data-g="coords"><b>Felder finden</b><span class="muted">Notation lesen lernen: 30 Sekunden lang Felder anklicken. Bestwert: <span class="nospell">${PR.coords || 0}</span></span></button>
+    <button class="gcard" data-g="bot"><b>Partie gegen den Bot</b><span class="muted">Ganze Partie in deiner Spielstärke, danach mit einem Klick analysieren.</span></button>`;
   const chapters = [...new Set(TLESSONS().map(l => l.chapter))];
   const next = TLESSONS().find(l => !PR.lessons[l.id]);
   $("tLessons").innerHTML = chapters.map(ch => `<div class="chap">${ch}</div>` +
@@ -603,12 +811,31 @@ function initTraining(){
   if (TR.trainBoard) { useCtx("training"); renderHome(); return; }
   TR.trainBoard = TR.board = new TBoard($("tBoard"));
   useCtx("training");
-  $("tModes").onclick = e => { const b = e.target.closest(".chipbtn"); if (b) startPuzzle(b.dataset.mode); };
-  $("tLessons").onclick = e => { const b = e.target.closest(".lesson"); if (b) openLesson(b.dataset.id); };
+  const top = () => { const r = $("tBoard").getBoundingClientRect(); if (r.top < 0 || r.top > innerHeight * .6) $("tBoard").scrollIntoView({block:"start", behavior:"smooth"}); };
+  $("tModes").onclick = e => { const b = e.target.closest(".chipbtn"); if (b){ TR.session = false; startPuzzle(b.dataset.mode); top(); } };
+  $("tThemes").onclick = e => { const b = e.target.closest(".trow"); if (b){ TR.session = false; startPuzzle(b.dataset.mode); top(); } };
+  $("tGames").onclick = e => {
+    const b = e.target.closest(".gcard"); if (!b) return;
+    if (b.dataset.g === "rush"){ startRush(); top(); }
+    if (b.dataset.g === "coords"){ startCoords(); top(); }
+    if (b.dataset.g === "bot"){ location.hash = "#openings"; setTimeout(() => window.zwOpeningsBot && window.zwOpeningsBot(), 80); }
+  };
+  $("tLessons").onclick = e => { const b = e.target.closest(".lesson"); if (b){ TR.session = false; openLesson(b.dataset.id); top(); } };
   renderHome(); showHomePanel();
 }
 window.zwInitTraining = initTraining;
-window.zwStartMistakes = () => startPuzzle("mistakes");
+window.zwStartMistakes = () => { TR.session = false; startPuzzle("mistakes"); };
+// Aus der Analyse direkt in eine Lektion oder ein Rätselthema springen
+window.zwTrain = o => { location.hash = "#training"; setTimeout(() => { TR.session = false; if (o.lesson && LESSONS.some(l => l.id === o.lesson)) openLesson(o.lesson); else startPuzzle(o.mode || "mix"); }, 60); };
+
+/* Tastatur im Training und bei den Eröffnungen: Eingabe oder Leertaste = grüner Knopf, H = Hinweis */
+document.addEventListener("keydown", e => {
+  const v = document.body.dataset.view; if (v !== "training" && v !== "openings") return;
+  if (e.ctrlKey || e.metaKey || e.altKey || /INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY/.test(e.target.tagName)) return;
+  const ctl = $(v === "training" ? "tCtl" : "oCtl"); if (!ctl) return;
+  if (e.key === "Enter" || e.key === " "){ const b = ctl.querySelector(".btn.primary:not(:disabled)"); if (b){ e.preventDefault(); b.click(); } }
+  if (e.key === "h" || e.key === "H"){ const b = [...ctl.querySelectorAll(".btn:not(:disabled)")].find(x => /^(Hinweis|Tipp)/.test(x.textContent)); if (b) b.click(); }
+});
 
 /* ---------- Ansicht umschalten (#training) ---------- */
 function route(){
@@ -618,6 +845,7 @@ function route(){
   $("navAnalyse").setAttribute("aria-current", v === "analyse" ? "page" : "false");
   $("navTraining").setAttribute("aria-current", v === "training" ? "page" : "false");
   $("navOpenings").setAttribute("aria-current", v === "openings" ? "page" : "false");
+  if (v !== "training" && TR.trainBoard && (TR.rush || (TR.co && TR.co.on))){ resetBoardMode(); showHomePanel(); }
   if (v === "training"){ liveRequest(null); initTraining(); }
   else if (v === "openings"){ liveRequest(null); window.zwInitOpenings(); }
   else render();

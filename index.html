@@ -39,7 +39,19 @@ main{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:28px;a
 .panel{background:var(--surface);border:0;border-radius:var(--radius);padding:16px;min-width:0}
 
 /* Brett */
-.boardrow{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px}
+.boardrow{display:grid;grid-template-columns:22px minmax(0,1fr);gap:6px 10px}
+.boardrow .evalbar{grid-column:1;grid-row:2}
+.boardrow .board{grid-column:2;grid-row:2}
+.pstrip{grid-column:2;display:flex;align-items:center;gap:8px;min-height:24px;font-size:.88rem;min-width:0}
+.pstrip .pname{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pstrip .pname small{color:var(--muted);font-weight:600}
+.pstrip .caps{display:flex;gap:5px;align-items:center;flex:none}
+.cg{display:flex}
+.cg .pc{width:19px;height:19px;flex:none;z-index:0}
+.cg .pc+.pc{margin-left:-11px}
+.cg .pc.b{filter:drop-shadow(0 0 1px #d0d0d0) drop-shadow(0 0 1px #d0d0d0)}
+.pstrip .adv{font:700 .82rem var(--font-mono);color:var(--fg);background:var(--surface2);border-radius:5px;padding:0 6px;flex:none}
+.pstrip .dot{flex:none}
 .evalbar{position:relative;border-radius:4px;overflow:hidden;background:var(--g-black);border:1px solid var(--line)}
 .evalbar .w{position:absolute;left:0;right:0;bottom:0;background:var(--g-white);transition:height .35s ease}
 .evalbar .lbl{position:absolute;left:0;right:0;font:600 9px/1 var(--font-mono);text-align:center;padding:4px 0}
@@ -113,7 +125,7 @@ textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:verti
 .msg{font-size:.88rem;color:var(--muted);margin-top:8px}
 .msg.err{color:var(--c-blunder)}
 .games{display:grid;gap:4px;margin-top:10px;max-height:300px;overflow:auto}
-.game{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:none;text-align:left;cursor:pointer;width:100%}
+.game{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:none;text-align:left;cursor:pointer;width:100%}
 .game:hover{background:var(--surface2)}
 .game.sel{border-color:var(--accent)}
 .dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--muted)}
@@ -218,6 +230,7 @@ textarea{width:100%;min-height:110px;font:12px/1.4 var(--font-mono);resize:verti
 .opcount{text-align:right;font:800 1.4rem/1.1 var(--font-ui);color:#fff}
 .opcount b{font-weight:800}
 .opcount .muted{font-size:.75rem;font-weight:600}
+.opsel{margin-bottom:12px}
 details{margin-top:8px}
 summary{cursor:pointer;font-weight:700;color:var(--fg);padding:4px 0}
 details ul{margin:.3em 0;padding-left:1.2em;display:grid;gap:4px}
@@ -275,6 +288,43 @@ span.omv{cursor:default}
 .botopts label{display:grid;gap:4px;font-size:.85rem;color:var(--muted);font-weight:600}
 .ttitle .lt{margin-left:6px}
 .tips ol{margin:0;padding-left:1.2em;display:grid;gap:6px;font-size:.9rem;line-height:1.45}
+/* Training: Tagestraining, Themen, Sturm, Felder finden */
+.sess{display:flex;gap:4px 12px;flex-wrap:wrap;font-size:.8rem;color:var(--muted);padding-bottom:8px;border-bottom:1px solid var(--line);font-weight:600}
+.sess b{color:var(--accent);font-weight:800}
+.sess .on{color:var(--fg)}
+.trow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:100%;background:none;border:0;color:var(--fg);font:inherit;text-align:left;padding:6px 6px;border-radius:6px;cursor:pointer;font-size:.9rem}
+.trow:hover{background:var(--surface2)}
+.trow .pbar,.trow .muted{grid-column:1/-1}
+.trow .muted{font-size:.78rem}
+.spark{margin-bottom:12px}
+.spark svg{display:block;width:100%;height:46px}
+.spark .muted{font-size:.8rem}
+.gcards{display:grid;gap:6px}
+.gcard{display:grid;gap:2px;background:var(--surface2);border:0;color:var(--fg);font:inherit;text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer}
+.gcard:hover{filter:brightness(1.15)}
+.gcard .muted{font-size:.85rem}
+.rushbar{display:flex;gap:6px 16px;align-items:baseline;flex-wrap:wrap}
+.rushbar .big{font:800 1.6rem/1.1 var(--font-ui);color:#fff;font-variant-numeric:tabular-nums}
+.hearts{color:var(--c-blunder);letter-spacing:2px}
+.hearts i{font-style:normal;opacity:.25}
+.coordbig{font:800 3.4rem/1.1 var(--font-ui);text-align:center;color:#fff;padding:6px 0}
+.board.nocoord .co{display:none}
+.board.nocoord .sq{cursor:pointer}
+/* Lernzusammenfassung nach der Analyse */
+.takeaways{display:grid;gap:10px}
+.tk{display:grid;gap:4px}
+.tk .tkh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tk .tkh b{font-weight:800}
+.jumps{display:flex;flex-wrap:wrap;gap:4px}
+.jump{border:0;background:var(--surface2);color:var(--fg);border-radius:5px;padding:2px 8px;font:600 .8rem var(--font-mono);cursor:pointer}
+.jump:hover{filter:brightness(1.2)}
+.phases{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.phases .big{font:800 1.25rem/1.1 var(--font-ui);color:#fff;font-variant-numeric:tabular-nums}
+.phases .muted{font-size:.78rem}
+.tkrec{background:var(--surface2);border-left:3px solid var(--accent);border-radius:6px;padding:8px 10px;line-height:1.45;font-size:.92rem}
+.tkrec .row{margin-top:6px}
+.game .done{color:var(--c-best);font:700 .78rem var(--font-mono)}
+kbd{font:600 .75rem var(--font-mono);background:var(--surface2);border-radius:4px;padding:1px 5px;color:var(--muted)}
 footer{color:var(--muted);font-size:.8rem;max-width:70ch}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -296,8 +346,10 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
   <main id="viewAnalyse">
     <section class="col">
       <div class="boardrow">
+        <div class="pstrip" id="stripTop"></div>
         <div class="evalbar" id="evalbar"><div class="w" id="evalw" style="height:50%"></div><div class="lbl" id="evallbl"></div></div>
         <div class="board" id="board"></div>
+        <div class="pstrip" id="stripBot"></div>
       </div>
       <div class="nav">
         <div class="btns">
@@ -355,6 +407,11 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
         <div class="players" id="players"></div>
       </div>
 
+      <div class="panel" id="learnPanel" hidden>
+        <h2>Das nimmst du aus der Partie mit</h2>
+        <div id="learnBox"></div>
+      </div>
+
       <div class="panel">
         <h2>Züge</h2>
         <div class="moves" id="moves"></div>
@@ -387,7 +444,8 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
           <li><b>Erst verstehen:</b> Variante im Lernmodus durchgehen und die Erklärungen lesen. Warum steht der Zug da?</li>
           <li><b>Dann üben:</b> Du spielst, der Gegner wählt zufällig eine seiner typischen Antworten. Fehler kommen öfter dran.</li>
           <li><b>Nach der Partie vergleichen:</b> Wo bist du aus der Theorie raus, und warum?</li>
-          <li><b>Pläne statt Züge:</b> Wenn der Gegner etwas Unbekanntes spielt, hilft der Aufbau c3, d3, Rochade, Te1, h3.</li>
+          <li><b>Pläne statt Züge:</b> Wenn der Gegner etwas Unbekanntes spielt, zeigt dir die Checkliste „Dein Plan“ unter dem Brett den nächsten sinnvollen Schritt.</li>
+          <li><b>Wiederholen:</b> Gelernte Varianten werden nach einigen Tagen wieder fällig. So bleiben sie im Kopf.</li>
         </ol>
       </div>
     </section>
@@ -401,7 +459,8 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     </section>
     <section class="col">
       <div class="panel"><h2>Heute</h2><div id="tToday"></div></div>
-      <div class="panel"><h2>Rätsel</h2><div class="modes" id="tModes"></div></div>
+      <div class="panel"><h2>Rätsel</h2><div class="modes" id="tModes"></div><div id="tThemes"></div></div>
+      <div class="panel"><h2>Spielerisch üben</h2><div class="gcards" id="tGames"></div></div>
       <div class="panel"><h2>Lektionen</h2><div class="lessons" id="tLessons"></div></div>
       <div class="panel"><h2>Geräte-Sync</h2><div id="tSync"></div></div>
       <div class="panel tips"><h2>So kommst du von 400 Elo weg</h2>
@@ -416,7 +475,7 @@ footer{color:var(--muted);font-size:.8rem;max-width:70ch}
     </section>
   </main>
 
-  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Figuren: cburnett (Colin M.L. Burnett, GPL). Pfeiltasten ← → zum Navigieren. Figuren ziehen oder anklicken, um eigene Varianten zu testen (Umwandlung immer in eine Dame). Rechtsklick ziehen zeichnet Pfeile, Rechtsklick auf ein Feld markiert es (mit Shift grün, Strg rot, Alt blau), Linksklick löscht alles.</footer>
+  <footer>Engine: Stockfish 19 (WebAssembly), läuft lokal in deinem Browser. Beim Öffnen per Doppelklick wird Stockfish 10 als Fallback genutzt. Klassifizierung nach Verlust an Gewinnwahrscheinlichkeit, Genauigkeit nach der offenen Lichess-Formel. Figuren: cburnett (Colin M.L. Burnett, GPL). Pfeiltasten ← → zum Navigieren, ↑ ↓ springen zum vorigen oder nächsten Fehler, F dreht das Brett. Fertige Analysen der letzten 12 Partien bleiben in diesem Browser gespeichert. Figuren ziehen oder anklicken, um eigene Varianten zu testen (Umwandlung immer in eine Dame). Rechtsklick ziehen zeichnet Pfeile, Rechtsklick auf ein Feld markiert es (mit Shift grün, Strg rot, Alt blau), Linksklick löscht alles.</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -549,18 +608,45 @@ function parseGame(pgn){
   return {fens, moves, white:h.White || "Weiß", black:h.Black || "Schwarz",
           wElo:h.WhiteElo || "", bElo:h.BlackElo || "", result:h.Result || "*"};
 }
-function setGame(g, flipped){
+function setGame(g, flipped, me){
   stopAnalysis();
-  S.game = g; S.ply = 0; S.flipped = !!flipped; S.evals = []; S.info = []; S.v = null; S.sel = null; S.me = null;
+  S.game = g; S.ply = 0; S.flipped = !!flipped; S.evals = []; S.info = []; S.v = null; S.sel = null; S.me = me || null; S.cacheDepth = 0; S.sumSide = null;
   $("anMsg").textContent = `${g.moves.length} Halbzüge geladen.`;
+  const c = acLoad()[gameKey(g)];
+  if (c && c.e && c.e.length === g.fens.length){
+    S.evals = c.e; S.cacheDepth = c.d; computeInfo();
+    $("anMsg").textContent = `Gespeicherte Analyse geladen (Tiefe ${c.d}).`;
+  }
   render();
+}
+
+/* ---------- Analyse-Speicher: fertige Analysen der letzten Partien bleiben in diesem Browser ---------- */
+function hashStr(s){ let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + s.length.toString(36); }
+const gameKey = g => hashStr(g.fens[0] + g.moves.map(m => m.uci).join(""));
+function acLoad(){ try { return JSON.parse(localStorage.getItem("zugwerk.acache")) || {}; } catch(e){ return {}; } }
+function sideAcc(col){
+  const inf = S.info.filter((x, i) => x && S.game.moves[i].color === col);
+  return inf.length ? inf.reduce((a, x) => a + x.acc, 0) / inf.length : null;
+}
+function acSave(g, depth){
+  const c = acLoad();
+  c[gameKey(g)] = {d:depth, t:Date.now(), u:g.url || "", a:S.me ? sideAcc(S.me) : null,
+    e:S.evals.map(e => Object.assign({}, e, {pv:(e.pv || []).slice(0, 10)}))};
+  let keys = Object.keys(c).sort((a, b) => c[b].t - c[a].t);
+  keys.slice(12).forEach(k => delete c[k]);
+  for (let tries = 0; tries < 4; tries++){
+    try { localStorage.setItem("zugwerk.acache", JSON.stringify(c)); return; }
+    catch(e){ keys = Object.keys(c).sort((a, b) => c[b].t - c[a].t); keys.slice(Math.max(1, Math.floor(keys.length / 2))).forEach(k => delete c[k]); }
+  }
 }
 
 /* ---------- Analyse ---------- */
 function stopAnalysis(){ if (S.running){ S.cancel = true; if (engine) engine.send("stop"); } }
-async function runAnalysis(){
+async function runAnalysis(force){
   if (!S.game || S.running) return;
   const g = S.game, depth = parseInt($("depth").value, 10);
+  // Schon analysiert (aus dem Speicher) und nicht ausdrücklich neu angefordert: nichts zu tun
+  if (force !== true && S.cacheDepth >= depth && S.evals.length === g.fens.length && S.evals.every(Boolean)){ render(); return; }
   S.running = true; S.cancel = false; S.evals = new Array(g.fens.length).fill(null); S.info = [];
   $("bAnalyse").disabled = true; $("bCancel").hidden = false; $("progress").hidden = false;
   $("anMsg").textContent = "Engine wird geladen …";
@@ -591,6 +677,7 @@ async function runAnalysis(){
       computeInfo(); render();
     }
     $("anMsg").textContent = S.cancel ? "Analyse abgebrochen." : `Fertig (Tiefe ${depth}, ${engine.name}).`;
+    if (!S.cancel && S.game === g){ S.cacheDepth = depth; acSave(g, depth); if (S.games.length) renderGames(); }
     if (!S.cancel && S.game === g && window.zwAfterAnalysis){
       const added = window.zwAfterAnalysis();
       if (added) $("anMsg").innerHTML = esc($("anMsg").textContent) + ` · <a href="#training" id="toMistakes">${added} ${added === 1 ? "Fehler" : "Fehler"} als Rätsel üben</a>`;
@@ -602,6 +689,7 @@ async function runAnalysis(){
     S.running = false; S.cancel = false;
     $("bAnalyse").disabled = false; $("bCancel").hidden = true;
     setTimeout(() => { if (!S.running) $("progress").hidden = true; }, 800);
+    renderLearn();
     liveRequest(curFen());
   }
 }
@@ -610,6 +698,30 @@ function material(fen, col){
   let w = 0, bl = 0;
   for (const ch of fen.split(" ")[0]){ const v = VAL[ch.toLowerCase()]; if (v === undefined) continue; if (ch === ch.toUpperCase()) w += v; else bl += v; }
   return col === "w" ? w - bl : bl - w;
+}
+/* Geschlagene Figuren und Materialvorsprung (Leisten über und unter dem Brett) */
+const START_COUNT = {q:1, r:2, b:2, n:2, p:8};
+function matInfo(fen){
+  const cnt = {w:{p:0,n:0,b:0,r:0,q:0}, b:{p:0,n:0,b:0,r:0,q:0}};
+  for (const ch of fen.split(" ")[0]){ const t = ch.toLowerCase(); if (t in START_COUNT) cnt[ch === t ? "b" : "w"][t]++; }
+  const lost = c => { const o = {}; for (const t in START_COUNT) o[t] = Math.max(0, START_COUNT[t] - cnt[c][t]); return o; };
+  const val = c => Object.keys(START_COUNT).reduce((a, t) => a + cnt[c][t] * VAL[t], 0);
+  return {lost:{w:lost("w"), b:lost("b")}, diff:val("w") - val("b")};
+}
+function stripHtml(col, mi, name, elo){
+  const opp = col === "w" ? "b" : "w", lost = mi.lost[opp];
+  const groups = Object.keys(START_COUNT).filter(t => lost[t]).map(t => `<span class="cg" title="${lost[t]}× ${PIECE_DE[t]}">${`<i class="pc ${opp} p${t}"></i>`.repeat(lost[t])}</span>`).join("");
+  const adv = col === "w" ? mi.diff : -mi.diff;
+  return `<span class="dot ${col}"></span><span class="pname">${esc(name)}${elo ? ` <small>(${esc(elo)})</small>` : ""}</span><span class="caps">${groups}</span>${adv > 0 ? `<b class="adv" title="Materialvorsprung in Bauerneinheiten">+${adv}</b>` : ""}`;
+}
+const PIECE_DE = {p:"Bauer", n:"Springer", b:"Läufer", r:"Turm", q:"Dame"};
+function renderStrips(){
+  const g = S.game, mi = matInfo(curFen());
+  const top = S.flipped ? "w" : "b", bot = S.flipped ? "b" : "w";
+  const nm = c => g ? (c === "w" ? g.white : g.black) : (c === "w" ? "Weiß" : "Schwarz");
+  const el = c => g ? (c === "w" ? g.wElo : g.bElo) : "";
+  $("stripTop").innerHTML = stripHtml(top, mi, nm(top), el(top));
+  $("stripBot").innerHTML = stripHtml(bot, mi, nm(bot), el(bot));
 }
 // Opfer: nach der besten Antwort des Gegners und dem eigenen Folgezug (Rückschlag) steht der Ziehende
 // mindestens 2 Bauerneinheiten schlechter da als vor dem Zug
@@ -728,7 +840,7 @@ function computeInfo(){
 }
 
 /* ---------- Darstellung ---------- */
-function render(){ renderBoard(); renderNav(); renderComment(); renderGraph(); renderPlayers(); renderMoves(); liveRequest(curFen()); }
+function render(){ renderBoard(); renderNav(); renderComment(); renderGraph(); renderPlayers(); renderLearn(); renderMoves(); liveRequest(curFen()); }
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 function curFen(){ if (!S.game) return START_FEN; return S.v ? S.v.fens[S.v.idx] : S.game.fens[S.ply]; }
 function curLast(){
@@ -772,6 +884,7 @@ function renderBoard(){
   html += `<svg class="arrows" viewBox="0 0 8 8">${arrow}</svg>`;
   if (DRAW) html += DRAW.svg(fen);
   $("board").innerHTML = html;
+  renderStrips();
 
   const ev = S.v ? (Live.cur === fen && Live.lines[0] ? Live.lines[0] : null) : (g && S.evals[S.ply]);
   const win = ev ? ev.win : 50;
@@ -938,6 +1051,86 @@ function renderPlayers(){
   };
   el.innerHTML = side("w") + side("b");
 }
+/* ---------- Lernzusammenfassung: Welche Art Fehler, in welcher Partiephase, was üben? ---------- */
+const KINDS = {
+  hung:        {t:"Figur eingestellt",        d:"Die gezogene Figur stand danach ungedeckt oder zu schwach gedeckt."},
+  lost:        {t:"Drohung übersehen",        d:"Der Gegner konnte nach deinem Zug Material gewinnen."},
+  mateAllowed: {t:"Matt zugelassen",          d:"Nach dem Zug hatte der Gegner ein erzwungenes Matt."},
+  missed:      {t:"Materialgewinn verpasst",  d:"Es gab etwas zu holen, du hast es liegen lassen."},
+  mateMissed:  {t:"Matt verpasst",            d:"Ein erzwungenes Matt war möglich."},
+  pos:         {t:"Stellung verschlechtert",  d:"Kein Material verloren, aber deutlich schlechter als der beste Zug."}
+};
+function mistakeKind(i){
+  const g = S.game, mv = g.moves[i], inf = S.info[i], a = S.evals[i], b = S.evals[i + 1];
+  if (!inf || !a || !b || !["mistake","blunder"].includes(inf.cls)) return null;
+  const col = mv.color, opp = col === "w" ? "b" : "w";
+  const mateFor = e => e && e.mate !== null && e.mate !== 0 ? (col === "w" ? e.mate : -e.mate) : null;
+  const mtA = mateFor(b), mtB = mateFor(a);
+  if (mtA !== null && mtA < 0) return "mateAllowed";
+  if (mtB !== null && mtB > 0 && !(mtA > 0)) return "mateMissed";
+  const m0 = material(g.fens[i], col);
+  const mal = steps => { let v = null; steps.forEach(s => { const x = material(s.after, col); v = (v === null || s.color === opp) ? x : Math.max(v, x); }); return v === null ? m0 : v; };
+  const reply = walk(g.fens[i + 1], b.pv, 4);
+  if (m0 - mal(reply) >= 1){ const cap = reply.find(s => s.color === opp && s.captured); return cap && cap.to === mv.to ? "hung" : "lost"; }
+  if (mal(walk(g.fens[i], a.pv, 4)) - m0 >= 2) return "missed";
+  return "pos";
+}
+function phaseOf(i){
+  if (i < 20) return 0;
+  let v = 0; for (const ch of S.game.fens[i].split(" ")[0]){ const t = ch.toLowerCase(); if (t !== "p" && VAL[t]) v += VAL[t]; }
+  return v <= 26 ? 2 : 1;
+}
+function analysisDone(){ const g = S.game; return !!g && g.moves.length > 0 && !S.running && S.info.length === g.moves.length && S.info.every(Boolean); }
+function sumSide(){ return S.sumSide || S.me || "w"; }
+function mistakePlies(col){ return S.info.map((x, i) => x && ["mistake","blunder"].includes(x.cls) && (!col || S.game.moves[i].color === col) ? i + 1 : 0).filter(Boolean); }
+function jumpMistake(dir){
+  if (!analysisDone()) return;
+  const list = mistakePlies(S.me || S.sumSide || null); if (!list.length) return;
+  const cur = S.v ? S.v.base : S.ply;
+  const t = dir > 0 ? (list.find(p => p > cur) || list[0]) : ([...list].reverse().find(p => p < cur) || list[list.length - 1]);
+  go(t);
+}
+const REC = {
+  hung:        {txt:"Du stellst Figuren ein. Prüfe vor jedem Zug das Zielfeld: Wer greift es an, wer deckt es?", btn:"Lektion: Der Blunder-Check", go:{lesson:"blundercheck"}},
+  lost:        {txt:"Du übersiehst Drohungen des Gegners. Frag dich nach jedem Gegnerzug: Was will er damit, was greift er an?", btn:"Lektion: Drohungen erkennen", go:{lesson:"drohungen"}},
+  mateAllowed: {txt:"Du hast ein Matt zugelassen. Schau auf deinen König: Hat er ein Fluchtfeld, zielen gegnerische Figuren auf ihn?", btn:"Lektion: Drohungen erkennen", go:{lesson:"drohungen"}},
+  missed:      {txt:"Du lässt Material liegen. Such in jeder Stellung zuerst nach Schach, Schlagen und Drohungen.", btn:"Rätsel: Figur schlagen", go:{mode:"hanging"}},
+  mateMissed:  {txt:"Du hast ein Matt verpasst. Mattbilder zu kennen ist reine Übungssache.", btn:"Matt-Rätsel üben", go:{mode:"mate"}},
+  pos:         {txt:"Keine groben Einsteller, aber ohne Plan gespielt. Faustregeln helfen: schlechteste Figur verbessern, Türme auf offene Linien.", btn:"Lektion: Pläne im Mittelspiel", go:{lesson:"mittelspiel"}}
+};
+function renderLearn(){
+  const box = $("learnPanel"), el = $("learnBox");
+  if (!analysisDone()){ box.hidden = true; return; }
+  box.hidden = false;
+  const g = S.game, col = sumSide();
+  const byKind = {}; Object.keys(KINDS).forEach(k => byKind[k] = []);
+  g.moves.forEach((m, i) => { if (m.color !== col) return; const k = mistakeKind(i); if (k) byKind[k].push(i); });
+  const kinds = Object.keys(KINDS).filter(k => byKind[k].length);
+  const ph = [[], [], []];
+  g.moves.forEach((m, i) => { if (m.color === col) ph[phaseOf(i)].push(S.info[i].acc); });
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) + " %" : "–";
+  const top = kinds.slice().sort((a, b) => byKind[b].length - byKind[a].length)[0];
+  const rec = top ? REC[top] : null;
+  const sideBtn = c => `<button class="chipbtn${col === c ? "" : " off"}" data-side="${c}">${esc(c === "w" ? g.white : g.black)}</button>`;
+  const worst = [1, 2, 0].map(k => ({k, n:ph[k].length, a:ph[k].length ? ph[k].reduce((x, y) => x + y, 0) / ph[k].length : 101})).filter(x => x.n >= 4).sort((a, b) => a.a - b.a)[0];
+  el.innerHTML = `<div class="takeaways">
+    <div class="modes">${sideBtn("w")}${sideBtn("b")}</div>
+    <div class="phases">${["Eröffnung","Mittelspiel","Endspiel"].map((n, k) => `<div><div class="big">${avg(ph[k])}</div><div class="muted">${n}${worst && worst.k === k && worst.a < 80 ? " · schwächste Phase" : ""}</div></div>`).join("")}</div>
+    ${kinds.length ? kinds.map(k => `<div class="tk"><div class="tkh"><b>${byKind[k].length}× ${KINDS[k].t}</b><span class="muted">${KINDS[k].d}</span></div>
+      <div class="jumps">${byKind[k].map(i => `<button class="jump" data-ply="${i + 1}">${esc(moveLabel(g.fens[i], g.moves[i].san))}</button>`).join("")}</div></div>`).join("")
+      : `<div class="fb good">Keine Fehler und keine Patzer. Stark gespielt!</div>`}
+    ${rec ? `<div class="tkrec"><b>Das übst du als Nächstes:</b> ${rec.txt}<div class="row"><button class="btn primary" id="recGo">${rec.btn}</button>${S.me === col && window.zwStartMistakes ? `<button class="btn" id="recMist">Diese Fehler als Rätsel</button>` : ""}</div></div>` : ""}
+    ${kinds.length ? `<div class="row"><button class="btn" id="mPrev">◀ Voriger Fehler</button><button class="btn" id="mNext">Nächster Fehler ▶</button><span class="muted" style="align-self:center">Tasten <kbd>↑</kbd> <kbd>↓</kbd></span></div>` : ""}
+  </div>`;
+  el.onclick = e => {
+    const j = e.target.closest(".jump"); if (j) return go(+j.dataset.ply);
+    const sd = e.target.closest("[data-side]"); if (sd){ S.sumSide = sd.dataset.side; return renderLearn(); }
+    if (e.target.id === "mPrev") return jumpMistake(-1);
+    if (e.target.id === "mNext") return jumpMistake(1);
+    if (e.target.id === "recGo" && window.zwTrain) return window.zwTrain(rec.go);
+    if (e.target.id === "recMist"){ location.hash = "#training"; setTimeout(() => window.zwStartMistakes(), 60); }
+  };
+}
 function renderMoves(){
   const g = S.game, el = $("moves");
   if (!g || !g.moves.length) { el.innerHTML = `<div class="empty">Noch keine Partie geladen.</div>`; return; }
@@ -1098,11 +1291,13 @@ async function loadChessCom(user){
 }
 function renderGames(){
   const RES = {win:"Sieg", loss:"Niederlage", draw:"Remis"};
+  const done = {}; Object.values(acLoad()).forEach(c => { if (c.u) done[c.u] = c; });
   $("games").innerHTML = S.games.map((x, i) => `<button class="game${S.selUrl === x.url ? " sel" : ""}" data-i="${i}">
     <span class="dot ${x.meW ? "w" : "b"}" title="${x.meW ? "Du mit Weiß" : "Du mit Schwarz"}"></span>
     <span class="opp">${esc(x.opp.username)} <small>${x.opp.rating}</small></span>
     <span class="tc">${x.tc} · ${x.end.toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit"})}</span>
-    <span class="res ${x.out}">${RES[x.out]}</span></button>`).join("");
+    <span class="res ${x.out}">${RES[x.out]}</span>
+    <span class="done" title="${done[x.url] ? "Schon analysiert, öffnet sofort" : ""}">${done[x.url] ? (done[x.url].a != null ? Math.round(done[x.url].a) + " %" : "✓") : ""}</span></button>`).join("");
 }
 
 /* ---------- Ereignisse ---------- */
@@ -1169,9 +1364,10 @@ function endDrag(e, cancel){
 $("board").addEventListener("pointerup", e => endDrag(e, false));
 $("board").addEventListener("pointercancel", e => endDrag(e, true));
 $("lines").onclick = e => { const b = e.target.closest(".line"); if (b) playMove(b.dataset.uci.slice(0,2), b.dataset.uci.slice(2,4)); };
-$("bLive").onclick = () => { Live.on = !Live.on; if (!Live.on) liveRequest(null); else liveRequest(curFen()); liveRender(); };
+$("bLive").onclick = () => { Live.on = !Live.on; try { localStorage.setItem("zugwerk.live", Live.on ? "1" : "0"); } catch(e){} if (!Live.on) liveRequest(null); else liveRequest(curFen()); liveRender(); };
 $("bFlip").onclick = () => { S.flipped = !S.flipped; render(); };
-$("bAnalyse").onclick = runAnalysis;
+$("bAnalyse").onclick = () => runAnalysis(true);
+$("depth").onchange = () => { try { localStorage.setItem("zugwerk.depth", $("depth").value); } catch(e){} };
 $("bCancel").onclick = stopAnalysis;
 $("moves").onclick = e => { const b = e.target.closest(".mv"); if (b) go(+b.dataset.ply); };
 $("graph").onclick = e => {
@@ -1186,6 +1382,10 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape") { if (S.v) exitVar(); else { S.sel = null; renderBoard(); } }
   if (e.key === "Home") go(0);
   if (e.key === "End") go(Infinity);
+  if (document.body.dataset.view !== "analyse" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "ArrowDown"){ jumpMistake(1); e.preventDefault(); }
+  if (e.key === "ArrowUp"){ jumpMistake(-1); e.preventDefault(); }
+  if (e.key === "f" || e.key === "F"){ S.flipped = !S.flipped; render(); }
 });
 function tab(which){
   const cc = which === "cc";
@@ -1198,7 +1398,7 @@ $("ccForm").onsubmit = e => { e.preventDefault(); const u = $("ccUser").value.tr
 $("games").onclick = e => {
   const b = e.target.closest(".game"); if (!b) return;
   const x = S.games[+b.dataset.i];
-  try { S.selUrl = x.url; renderGames(); setGame(parseGame(x.pgn), !x.meW); S.me = x.meW ? "w" : "b"; runAnalysis(); }
+  try { S.selUrl = x.url; renderGames(); const g = parseGame(x.pgn); g.url = x.url; setGame(g, !x.meW, x.meW ? "w" : "b"); runAnalysis(); }
   catch(err){ $("ccMsg").className = "msg err"; $("ccMsg").textContent = err.message; }
 };
 $("pgnLoad").onclick = () => {
@@ -1207,24 +1407,33 @@ $("pgnLoad").onclick = () => {
     const g = parseGame($("pgnText").value);
     let u = ""; try { u = (localStorage.getItem("zugwerk.user") || "").toLowerCase(); } catch(_){}
     const me = u && g.white.toLowerCase() === u ? "w" : u && g.black.toLowerCase() === u ? "b" : null;
-    setGame(g, me === "b"); S.me = me; m.className = "msg"; m.textContent = "Partie übernommen.";
+    S.selUrl = null; setGame(g, me === "b", me); m.className = "msg"; m.textContent = "Partie übernommen.";
   }
   catch(err){ m.className = "msg err"; m.textContent = err.message; }
 };
 
 /* ---------- Start ---------- */
-try { const u = localStorage.getItem("zugwerk.user"); if (u) $("ccUser").value = u; } catch(e){}
+let savedUser = "";
+try {
+  savedUser = localStorage.getItem("zugwerk.user") || ""; if (savedUser) $("ccUser").value = savedUser;
+  const d = localStorage.getItem("zugwerk.depth"); if (d && [...$("depth").options].some(o => o.value === d)) $("depth").value = d;
+  if (localStorage.getItem("zugwerk.live") === "0") Live.on = false;
+} catch(e){}
 $("pgnText").value = SAMPLE_PGN;
 setGame(parseGame(SAMPLE_PGN), false);
-$("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
+if (!S.cacheDepth) $("anMsg").textContent = "Beispiel: Morphys Opernpartie (1858).";
+// Bekannter Benutzer: Partien gleich laden, damit ein Klick zur Analyse reicht
+if (savedUser) loadChessCom(savedUser.toLowerCase());
 </script>
-<script src="lessons.js?v=20261114c"></script>
-<script src="puzzles.js?v=20261114c"></script>
-<script src="openings.js?v=20261114c"></script>
-<script src="plans.js?v=20261114c"></script>
-<script src="openings-ui.js?v=20261114c"></script>
-<script src="training.js?v=20261114c"></script>
-<script src="sync.js?v=20261114c"></script>
-<script src="spell.js?v=20261114c"></script>
+<script src="lessons.js?v=20261116a"></script>
+<script src="lessons2.js?v=20261116a"></script>
+<script src="puzzles.js?v=20261116a"></script>
+<script src="openings.js?v=20261116a"></script>
+<script src="openings2.js?v=20261116a"></script>
+<script src="plans.js?v=20261116a"></script>
+<script src="openings-ui.js?v=20261116a"></script>
+<script src="training.js?v=20261116a"></script>
+<script src="sync.js?v=20261116a"></script>
+<script src="spell.js?v=20261116a"></script>
 </body>
 </html>

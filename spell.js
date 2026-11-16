@@ -6,7 +6,7 @@
   const PN = {K:"König", D:"Dame", T:"Turm", L:"Läufer", S:"Springer"};
   const PROMO = {D:"Dame", T:"Turm", L:"Läufer", S:"Springer"};
   const ROOTS = ["viewOpenings", "viewTraining", "comment"];
-  const SKIP = ".omoves,#moves,#lines,.omv,.mv,.lname,.opp,.tagnext,.varbar,#plyinfo,.lt,.chip,.co,.badge-sq,input,textarea,select,option,script,style,.nospell,.big,.goal";
+  const SKIP = ".omoves,#moves,#lines,.omv,.mv,.lname,.opp,.tagnext,.varbar,#plyinfo,.lt,.chip,.co,.badge-sq,input,textarea,select,option,script,style,.nospell,.big,.goal,.opsel,.pstrip,.jump,.coordbig";
   const ORIG = new WeakMap(), CONV = new WeakMap();
   // Wörter vor einem Feldnamen, nach denen es sich um einen Zug handelt (sonst ist es ein Feld, z. B. „auf e4“, „deckt e4“)
   const MOVE_PREV = new Set(["mit","bereitet","sofort","später","plan","dann","statt","kommt","spielt","spielst","spielen","gelingt",

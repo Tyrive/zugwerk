@@ -30,6 +30,12 @@ function mergeProgress(a, b){
   new Set([...Object.keys(a.days || {}), ...Object.keys(b.days || {})]).forEach(k => {
     const x = (a.days || {})[k] || {}, y = (b.days || {})[k] || {};
     days[k] = {p:Math.max(x.p || 0, y.p || 0), l:Math.max(x.l || 0, y.l || 0), m:Math.max(x.m || 0, y.m || 0), a:Math.max(x.a || 0, y.a || 0)};
+    const r = (x.p || 0) >= (y.p || 0) ? (x.r || y.r) : (y.r || x.r); if (r) days[k].r = r;
+  });
+  const tags = {};
+  new Set([...Object.keys(a.tags || {}), ...Object.keys(b.tags || {})]).forEach(k => {
+    const x = (a.tags || {})[k] || {}, y = (b.tags || {})[k] || {};
+    tags[k] = {ok:Math.max(x.ok || 0, y.ok || 0), fail:Math.max(x.fail || 0, y.fail || 0)};
   });
   return {
     // Wertung vom Gerät mit mehr gewerteten Rätseln, bei Gleichstand das zuletzt genutzte
@@ -39,6 +45,10 @@ function mergeProgress(a, b){
     seen: Object.assign({}, b.seen, a.seen),
     lessons: Object.assign({}, b.lessons, a.lessons),
     cleared: Object.assign({}, b.cleared, a.cleared),
+    tags,
+    retry: Object.assign({}, newer === a ? b.retry : a.retry, newer.retry),
+    rush: Math.max(a.rush || 0, b.rush || 0),
+    coords: Math.max(a.coords || 0, b.coords || 0),
     days,
     updated: Math.max(a.updated || 0, b.updated || 0)
   };
